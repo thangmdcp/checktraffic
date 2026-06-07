@@ -1,0 +1,13 @@
+.env
+cache.db
+tranco_cache/
+browser_profile/
+dumps/
+proxies.txt
+serper_keys.txt
+ket_qua.xlsx
+ket_qua.csv
+__pycache__/
+*.pyc
+.venv/
+venv/

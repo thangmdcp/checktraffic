@@ -1,0 +1,20 @@
+services:
+  checktraffic:
+    build: .
+    container_name: checktraffic
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    environment:
+      STREAMLIT_SERVER_BASE_URL_PATH: checktraffic
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+      TRAFFICCV_CACHE_DB: /data/cache.db
+      TRAFFICCV_HEADLESS: "1"
+    volumes:
+      - checktraffic-data:/data
+      - ./serper_keys.txt:/app/serper_keys.txt:ro
+      # Bỏ dấu # nếu server có file proxies.txt.
+      # - ./proxies.txt:/app/proxies.txt:ro
+
+volumes:
+  checktraffic-data:

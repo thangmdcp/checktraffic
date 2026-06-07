@@ -1,0 +1,12 @@
+# Đổi tên file này thành proxies.txt rồi điền proxy (mỗi dòng một proxy).
+# App sẽ xoay vòng các proxy này (mỗi lô 10 web đi một IP) để giảm rủi ro bị chặn.
+# Dòng bắt đầu bằng # bị bỏ qua. Không có file này thì app dùng IP mạng nhà.
+#
+# Định dạng (Playwright):
+#   http://host:port
+#   http://user:pass@host:port
+#   socks5://host:port
+#
+# Ví dụ:
+# http://123.45.67.89:8080
+# http://user:pass@proxy.example.com:3128

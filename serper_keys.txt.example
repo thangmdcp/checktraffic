@@ -1,0 +1,7 @@
+# Đổi tên thành serper_keys.txt và điền API key Serper.dev (mỗi dòng 1 key).
+# Lấy key miễn phí tại: https://serper.dev (2.500 lượt tìm/khoản free).
+# App sẽ tự xoay vòng key khi 1 key hết lượt. Dòng bắt đầu bằng # bị bỏ qua.
+#
+# Ví dụ:
+# 8184c184a97bd43685ecd042075437c1xxxxxxxx
+# 6e960a130a89f550455973db2ee04063xxxxxxxx
