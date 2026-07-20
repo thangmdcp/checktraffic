@@ -26,23 +26,29 @@ SUCCESS, DANGER, WARNING = "#10B981", "#EF4444", "#F59E0B"
 MAX_TABLE_ROWS = 1000  # giới hạn dòng hiển thị bảng
 
 THEMES = {
-    "Sáng": dict(bg="#F8FAFC", panel="#FFFFFF", border="rgba(226, 232, 240, 0.8)", text="#0F172A",
-                 muted="#64748B", grid="rgba(15, 23, 42, 0.05)", inputbg="#FFFFFF",
-                 sidebar="#FFFFFF", hover="#F1F5F9", headbg="#F8FAFC",
+    "Sáng": dict(bg="#F8FAFC", panel="#FFFFFF", border="#E2E8F0", text="#0F172A",
+                 muted="#64748B", grid="#F1F5F9", inputbg="#FFFFFF",
+                 sidebar="#FFFFFF", hover="#F1F5F9", headbg="#F1F5F9",
                  tablebg="#FFFFFF", tableodd="#F8FAFC", tablehover="#EEF2FF", tableborder="#E2E8F0",
-                 dlbg="#EEF2FF"),
+                 dlbg="#EEF2FF",
+                 herobg="linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 50%, #FAF5FF 100%)",
+                 heroborder="#C7D2FE", herotitle="#1E1B4B", herodesc="#475569",
+                 herobadgebgb="rgba(79, 70, 229, 0.08)", herobadgebord="rgba(99, 102, 241, 0.25)", herobadgetxt="#4338CA"),
     "Tối": dict(bg="#0B0F17", panel="rgba(17, 24, 39, 0.70)", border="rgba(255, 255, 255, 0.08)",
                 text="#F8FAFC", muted="#94A3B8", grid="rgba(255, 255, 255, 0.05)",
                 inputbg="rgba(15, 23, 42, 0.6)", sidebar="#070A10",
                 hover="rgba(255, 255, 255, 0.04)", headbg="#111827",
                 tablebg="#0F172A", tableodd="#111827", tablehover="#1E293B", tableborder="rgba(255,255,255,0.08)",
-                dlbg="rgba(99, 102, 241, 0.12)"),
+                dlbg="rgba(99, 102, 241, 0.12)",
+                herobg="linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 27, 75, 0.90) 50%, rgba(15, 23, 42, 0.98) 100%)",
+                heroborder="rgba(255, 255, 255, 0.12)", herotitle="#FFFFFF", herodesc="#94A3B8",
+                herobadgebgb="rgba(255, 255, 255, 0.08)", herobadgebord="rgba(255, 255, 255, 0.18)", herobadgetxt="#E2E8F0"),
 }
 
 # ================================ Sidebar ================================
 with st.sidebar:
     st.markdown('<div style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #6366F1; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span class="mi" style="font-size: 24px;">tune</span> Cấu Hình SaaS</div>', unsafe_allow_html=True)
-    theme_name = st.radio("Giao diện", ["Sáng", "Tối"], index=1, horizontal=True, key="theme")
+    theme_name = st.radio("Giao diện", ["Sáng", "Tối"], index=0, horizontal=True, key="theme")
 
     speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value="Vừa")
     min_delay, max_delay = {"An toàn": (6.0, 12.0), "Vừa": (3.0, 8.0), "Nhanh": (1.5, 4.0)}[speed]
@@ -173,35 +179,25 @@ st.markdown(
     .saas-hero {{
         position: relative;
         overflow: hidden;
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 27, 75, 0.90) 50%, rgba(15, 23, 42, 0.98) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: {T['herobg']};
+        border: 1px solid {T['heroborder']};
         border-radius: 24px;
         padding: 32px 36px;
         margin-bottom: 24px;
-        box-shadow: 0 20px 50px -20px rgba(79, 70, 229, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }}
-    .saas-hero::before {{
-        content: "";
-        position: absolute;
-        top: -50%;
-        right: -10%;
-        width: 300px;
-        height: 300px;
-        background: radial-gradient(circle, rgba(139, 92, 246, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
-        pointer-events: none;
+        box-shadow: 0 20px 50px -20px rgba(79, 70, 229, 0.25);
     }}
     .saas-hero-badge {{
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: {T['herobadgebgb']};
+        border: 1px solid {T['herobadgebord']};
         backdrop-filter: blur(10px);
         padding: 5px 14px;
         border-radius: 999px;
         font-size: 12px;
         font-weight: 600;
-        color: #E2E8F0;
+        color: {T['herobadgetxt']};
         margin-bottom: 12px;
     }}
     .pulse-dot {{
@@ -219,18 +215,18 @@ st.markdown(
     .saas-hero-title {{
         font-size: 32px;
         font-weight: 800;
-        color: #FFFFFF !important;
+        color: {T['herotitle']} !important;
         letter-spacing: -0.8px;
         margin: 0 0 8px;
     }}
     .gradient-text {{
-        background: linear-gradient(135deg, #818CF8, #C084FC, #38BDF8);
+        background: linear-gradient(135deg, #4F46E5, #8B5CF6, #06B6D4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }}
     .saas-hero-desc {{
         font-size: 15px;
-        color: #94A3B8 !important;
+        color: {T['herodesc']} !important;
         margin: 0;
         max-width: 780px;
     }}
@@ -249,7 +245,7 @@ st.markdown(
     }}
     .stat:hover {{
         transform: translateY(-2px);
-        box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15);
     }}
     .stat .row {{ display:flex; align-items:center; gap:8px; }}
     .stat .dot {{ width:8px; height:8px; border-radius:50%; box-shadow:0 0 12px currentColor; }}
