@@ -101,7 +101,17 @@ with st.sidebar:
         st.code("""curl -X POST "https://checktraffic.vibevic.com/api/check" \\
   -H "Content-Type: application/json" \\
   -d '{"inputs": ["google.com", "Nike"]}'""", language="bash")
-        st.caption("📘 Xem chi tiết tại file `API_GUIDE.md`.")
+        
+        from pathlib import Path
+        guide_file = Path(__file__).parent / "CHECK_TRAFFIC_API.md"
+        if guide_file.exists():
+            st.download_button(
+                label="⬇️ Tải HD Tích Hợp cho AI (.md)",
+                data=guide_file.read_bytes(),
+                file_name="CHECK_TRAFFIC_API.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
 
 T = THEMES[theme_name]
 
