@@ -21,9 +21,9 @@ api_app = FastAPI(
     title="CheckTraffic REST API",
     description="REST API tự động lấy dữ liệu lượt truy cập/tháng từ traffic.cv cho website & thương hiệu.",
     version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 # CORS Middleware để các Web App khác có thể gọi AJAX/Fetch trực tiếp từ trình duyệt
@@ -68,12 +68,14 @@ class CheckResponse(BaseModel):
     data: List[TrafficItem]
 
 
-@api_app.get("/api/health", summary="Kiểm tra trạng thái API")
+@api_app.get("/health", summary="Kiểm tra trạng thái API")
+@api_app.get("/api/health", include_in_schema=False)
 def health_check():
     return {"status": "ok", "service": "CheckTraffic API", "version": "1.0.0"}
 
 
-@api_app.get("/api/cache", summary="Tra cứu dữ liệu nhanh từ Cache")
+@api_app.get("/cache", summary="Tra cứu dữ liệu nhanh từ Cache")
+@api_app.get("/api/cache", include_in_schema=False)
 def get_cached_domain(domain: str = Query(..., description="Root domain (ví dụ: google.com) cần tra cứu trong cache")):
     cache = Cache()
     res = cache.get(domain)
@@ -96,7 +98,8 @@ def get_cached_domain(domain: str = Query(..., description="Root domain (ví d�
     }
 
 
-@api_app.post("/api/check", response_model=CheckResponse, summary="Check traffic cho danh sách website / brand")
+@api_app.post("/check", response_model=CheckResponse, summary="Check traffic cho danh sách website / brand")
+@api_app.post("/api/check", response_model=CheckResponse, include_in_schema=False)
 def check_traffic(req: CheckRequest):
     if not req.inputs:
         raise HTTPException(status_code=400, detail="Danh sách inputs không được để trống.")
