@@ -80,6 +80,21 @@ with st.sidebar:
     keep_unknown = st.toggle("Giữ web không có dữ liệu", value=False, disabled=not filter_on)
     drop_no_site = st.toggle("Bỏ brand không tìm thấy web", value=False, disabled=not filter_on)
 
+    st.divider()
+    with st.expander(":material/api: REST API cho Dev", expanded=False):
+        st.markdown("""
+        **Tích hợp API vào Web App khác:**
+        - 📄 **Swagger UI:** [/api/docs](/api/docs)
+        - ⚡ **POST Check:** `/api/check`
+        - 🔍 **GET Cache:** `/api/cache?domain=...`
+        
+        **Ví dụ cURL:**
+        """)
+        st.code("""curl -X POST "https://checktraffic.vibevic.com/api/check" \\
+  -H "Content-Type: application/json" \\
+  -d '{"inputs": ["google.com", "Nike"]}'""", language="bash")
+        st.caption("📘 Chi tiết xem trong file `API_GUIDE.md` tại repo GitHub.")
+
 T = THEMES[theme_name]
 
 # ============================ CSS (theo theme) ============================

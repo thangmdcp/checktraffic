@@ -9,4 +9,4 @@ COPY . .
 
 ENV TRAFFICCV_HEADLESS=1
 EXPOSE 8501
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+CMD ["python", "server.py"]
