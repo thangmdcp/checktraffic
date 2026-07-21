@@ -102,8 +102,8 @@ class Cache:
             return None
 
         data = dict(zip(_FIELDS, vals))
-        # Tự động bỏ qua cache cũ bị thiếu số liệu
-        if not data.get("pages_per_visit") and not data.get("bounce_rate"):
+        # Tự động bỏ qua cache cũ bị thiếu lượt truy cập hoặc thiếu số liệu
+        if not data.get("monthly_visits_raw") or data.get("monthly_visits_raw") == "N/A":
             return None
         if data.get("top_regions") and isinstance(data["top_regions"], str):
             try:

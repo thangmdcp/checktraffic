@@ -136,17 +136,18 @@ def check_traffic(req: CheckRequest):
         results.append(res)
 
     run_auto_batch(
-        raw_items=raw_items,
+        raw_items,
+        serper_keys,
         settings=settings,
-        serper_keys=serper_keys,
         progress_cb=on_progress,
     )
 
     output_data = []
     for r in results:
+        b_name = r.brand or r.domain
         output_data.append(TrafficItem(
-            input=r.brand_name,
-            brand_name=r.brand_name,
+            input=b_name,
+            brand_name=b_name,
             domain=r.domain,
             total_visits=r.monthly_visits_raw or "N/A",
             monthly_visits_raw=r.monthly_visits_raw or "N/A",
