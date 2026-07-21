@@ -133,15 +133,25 @@ class BrowserSession:
         return page.inner_text("body")
 
     def fetch_domain_details(self, domain: str) -> str:
-        """Mở trang https://traffic.cv/<domain> với timeout ngắn 3s để không treo app."""
-        if not domain or not self.page:
+        """Mở trang https://traffic.cv/<domain> trên tab tạm thời để lấy Top Regions & Keywords."""
+        if not domain or not self._context:
             return ""
         url = f"{BASE_URL}/{quote(domain.strip())}"
+        detail_page = None
         try:
-            self.page.goto(url, wait_until="domcontentloaded", timeout=3000)
-            if is_challenge_page(self.page):
+            detail_page = self._context.new_page()
+            detail_page.goto(url, wait_until="domcontentloaded", timeout=6000)
+            if is_challenge_page(detail_page):
+                detail_page.close()
                 return ""
-            self.page.wait_for_timeout(1000)
-            return self.page.inner_text("body")
+            detail_page.wait_for_timeout(2000)
+            text = detail_page.inner_text("body")
+            detail_page.close()
+            return text
         except Exception:
+            if detail_page:
+                try:
+                    detail_page.close()
+                except Exception:
+                    pass
             return ""

@@ -178,8 +178,8 @@ def run_batch(
             if batch_cb:
                 batch_cb(bi + 1, len(batches), batch_results)
 
-            # Thử bóc thêm Top Regions & Keywords với timeout ngắn (chỉ khi lô nhỏ <= 3 web)
-            if session and len(chunk) <= 3:
+            # Chỉ cào thêm Top Regions & Keywords khi người dùng check ĐÚNG 1 LINK DUY NHẤT
+            if session and len(domains) == 1:
                 for res in batch_results:
                     if res.status == "ok" and not res.top_regions:
                         try:
