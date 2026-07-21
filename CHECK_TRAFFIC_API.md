@@ -1,6 +1,6 @@
 # 🚀 CheckTraffic API — AI Integration Specs
 
-> **Hướng dẫn cho AI / Dev:** Sử dụng API này để lấy lượt truy cập hàng tháng của bất kỳ website/brand nào, sau đó lưu vào Supabase.
+> **Hướng dẫn cho AI / Dev:** Sử dụng API này để lấy lượt truy cập hàng tháng và các chỉ số traffic của bất kỳ website/brand nào, sau đó lưu vào Supabase.
 
 ---
 
@@ -36,16 +36,11 @@
         "brand_name": "google.com",
         "domain": "google.com",
         "total_visits": "85.4B",
+        "change": "-1.2%",
+        "trend": "Giảm",
         "pages_per_visit": "2.8",
         "bounce_rate": "28.5%",
         "avg_duration": "10:30",
-        "top_regions": [
-          {"country": "United States", "share": "25.02%"},
-          {"country": "India", "share": "6.31%"}
-        ],
-        "top_keywords": [
-          {"keyword": "google", "traffic": "18.28K", "volume": "13.68K", "cpc": "$23.72"}
-        ],
         "status": "ok",
         "cache_hit": true
       },
@@ -54,6 +49,8 @@
         "brand_name": "Nike",
         "domain": "nike.com",
         "total_visits": "142.5M",
+        "change": "+3.5%",
+        "trend": "Tăng",
         "pages_per_visit": "3.5",
         "bounce_rate": "42.1%",
         "avg_duration": "03:15",
@@ -76,9 +73,11 @@
     "data": {
       "domain": "google.com",
       "total_visits": "85.4B",
-      "bounce_rate": "28.5%",
+      "change": "-1.2%",
+      "trend": "Giảm",
       "pages_per_visit": "2.8",
       "avg_duration": "10:30",
+      "bounce_rate": "28.5%",
       "status": "ok",
       "cache_hit": true
     }
@@ -93,7 +92,7 @@
 Hãy viết giúp tôi hàm TypeScript/JavaScript bằng Next.js / Node.js để:
 1. Nhận một domain hoặc tên brand từ input của user.
 2. Gọi POST API https://checktraffic.vibevic.com/api/check với body: {"inputs": [domain], "use_cache": true}.
-3. Lấy dữ liệu trả về (total_visits, bounce_rate, pages_per_visit, avg_duration).
+3. Lấy dữ liệu trả về (total_visits, change, trend, pages_per_visit, avg_duration, bounce_rate).
 4. Lưu dữ liệu này vào bảng Supabase 'website_traffic' bằng @supabase/supabase-js.
 ```
 
@@ -132,9 +131,11 @@ export async function fetchAndSaveTraffic(targetInput: string) {
       domain: item.domain,
       brand_name: item.brand_name,
       total_visits: item.total_visits,
-      bounce_rate: item.bounce_rate,
+      change: item.change,
+      trend: item.trend,
       pages_per_visit: item.pages_per_visit,
       avg_duration: item.avg_duration,
+      bounce_rate: item.bounce_rate,
       status: item.status,
       checked_at: new Date().toISOString()
     }])
