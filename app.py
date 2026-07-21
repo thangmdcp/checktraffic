@@ -62,6 +62,7 @@ with st.sidebar:
             c.conn.execute("DELETE FROM traffic")
             c.conn.commit()
             c.close()
+            st.session_state["results"] = None
             st.toast("Đã xóa sạch bộ nhớ cache!", icon="🧹")
         except Exception:
             pass
@@ -568,6 +569,7 @@ def _run_and_stream(items, settings, serper_keys=None):
 
 # ================================ Run ================================
 if start:
+    st.session_state["results"] = None
     if not preview:
         st.warning("Chưa có dữ liệu hợp lệ — hãy dán danh sách vào ô trên.")
     elif n_brand and not serper_keys:
