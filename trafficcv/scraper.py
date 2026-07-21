@@ -288,17 +288,30 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
 
     Domain không xuất hiện trong kết quả (traffic.cv không có dữ liệu) → not_found.
     """
-    lines = [l.strip() for l in (body_text or "").splitlines()]
+    lines = [l.strip() for l in (body_text or "").splitlines() if l.strip()]
     req_lower = {d.lower(): d for d in requested}
 
-    # Mốc bắt đầu mỗi card = dòng khớp ĐÚNG một domain được yêu cầu (mỗi domain lấy lần đầu).
     cards: list[tuple[int, str]] = []
     seen: set[str] = set()
+
     for i, line in enumerate(lines):
-        dom = req_lower.get(line.lower())
-        if dom and dom not in seen:
-            seen.add(dom)
-            cards.append((i, dom))
+        line_clean = line.lower()
+        matched_dom = None
+        if line_clean in req_lower:
+            matched_dom = req_lower[line_clean]
+        else:
+            norm = normalize_domain(line)
+            if norm and norm in req_lower:
+                matched_dom = req_lower[norm]
+            else:
+                for rd in req_lower:
+                    if rd in line_clean:
+                        matched_dom = req_lower[rd]
+                        break
+
+        if matched_dom and matched_dom not in seen:
+            seen.add(matched_dom)
+            cards.append((i, matched_dom))
 
     out: dict[str, TrafficResult] = {}
     for idx, (start, dom) in enumerate(cards):
@@ -306,9 +319,15 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
         seg = lines[start:end]
         raw = _value_after(seg, "Total Visits")
         if raw is None:
-            out[dom] = TrafficResult(dom, status="not_found",
-                                     error="Không thấy 'Total Visits' trong kết quả")
+            for j, sline in enumerate(seg):
+                if "total visits" in sline.lower() and j + 1 < len(seg):
+                    raw = seg[j + 1]
+                    break
+
+        if raw is None:
+            out[dom] = TrafficResult(dom, status="not_found", error="Không thấy Total Visits")
             continue
+
         visits_str, change = split_visits_raw(raw)
         out[dom] = TrafficResult(
             domain=dom,
@@ -322,10 +341,9 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
             registration=_value_after(seg, "Registration"),
         )
 
-    # Domain được yêu cầu nhưng không có card nào.
     for dom in requested:
-        out.setdefault(dom, TrafficResult(dom, status="not_found",
-                                          error="Không có trong kết quả trả về"))
+        out.setdefault(dom, TrafficResult(dom, status="not_found", error="Không có trong kết quả trả về"))
+
     return out
 
 

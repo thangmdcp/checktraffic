@@ -153,46 +153,54 @@ def run_batch(
                 outcome.cancelled = True
                 break
 
-            # chọn proxy cho lô này (xoay vòng nếu có nhiều)
-            proxy = proxies[proxy_idx % len(proxies)] if proxies else None
-            need_new = (
-                session is None
-                or proxy != current_proxy
-                or (bi > 0 and settings.restart_every and bi % settings.restart_every == 0)
-            )
-            if need_new:
-                close_session()
-                session = BrowserSession(headless=settings.headless, proxy=proxy)
-                session.__enter__()
-                current_proxy = proxy
+            try:
+                # chọn proxy cho lô này (xoay vòng nếu có nhiều)
+                proxy = proxies[proxy_idx % len(proxies)] if proxies else None
+                need_new = (
+                    session is None
+                    or proxy != current_proxy
+                    or (bi > 0 and settings.restart_every and bi % settings.restart_every == 0)
+                )
+                if need_new:
+                    close_session()
+                    session = BrowserSession(headless=settings.headless, proxy=proxy)
+                    session.__enter__()
+                    current_proxy = proxy
 
-            results_map = get_traffic_bulk(session, chunk)
-            batch_results = [results_map.get(
-                d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
+                results_map = get_traffic_bulk(session, chunk)
+                batch_results = [results_map.get(
+                    d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
 
-            # Emit và lưu cache ngay lập tức để UI không bị chờ
-            for res in batch_results:
-                cache.put(res)
-                outcome.fetched += 1
-                emit(res)
-            if batch_cb:
-                batch_cb(bi + 1, len(batches), batch_results)
-
-            # Chỉ cào thêm Top Regions & Keywords khi người dùng check ĐÚNG 1 LINK DUY NHẤT
-            if session and len(domains) == 1:
+                # Emit và lưu cache ngay lập tức để UI không bị chờ
                 for res in batch_results:
-                    if res.status == "ok" and not res.top_regions:
-                        try:
-                            dt_text = session.fetch_domain_details(res.domain)
-                            if dt_text:
-                                regs, kws = parse_domain_details(dt_text)
-                                if regs:
-                                    res.top_regions = regs
-                                if kws:
-                                    res.top_keywords = kws
-                                cache.put(res)
-                        except Exception:
-                            pass
+                    cache.put(res)
+                    outcome.fetched += 1
+                    emit(res)
+                if batch_cb:
+                    batch_cb(bi + 1, len(batches), batch_results)
+
+                # Chỉ cào thêm Top Regions & Keywords khi người dùng check ĐÚNG 1 LINK DUY NHẤT
+                if session and len(domains) == 1:
+                    for res in batch_results:
+                        if res.status == "ok" and not res.top_regions:
+                            try:
+                                dt_text = session.fetch_domain_details(res.domain)
+                                if dt_text:
+                                    regs, kws = parse_domain_details(dt_text)
+                                    if regs:
+                                        res.top_regions = regs
+                                    if kws:
+                                        res.top_keywords = kws
+                                    cache.put(res)
+                            except Exception:
+                                pass
+            except Exception as b_err:
+                batch_results = [TrafficResult(d, status="error", error=f"Lỗi: {b_err}") for d in chunk]
+                for res in batch_results:
+                    outcome.fetched += 1
+                    emit(res)
+                if batch_cb:
+                    batch_cb(bi + 1, len(batches), batch_results)
 
             # 3) auto-backoff khi nghi bị chặn
             if _is_bad_batch(batch_results):
