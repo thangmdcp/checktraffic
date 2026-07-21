@@ -170,10 +170,18 @@ def run_batch(
             batch_results = [results_map.get(
                 d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
 
-            # Bóc thêm Top Regions & Top Keywords cho các domain thành công
-            if session:
+            # Emit và lưu cache ngay lập tức để UI không bị chờ
+            for res in batch_results:
+                cache.put(res)
+                outcome.fetched += 1
+                emit(res)
+            if batch_cb:
+                batch_cb(bi + 1, len(batches), batch_results)
+
+            # Thử bóc thêm Top Regions & Keywords với timeout ngắn (chỉ khi lô nhỏ <= 3 web)
+            if session and len(chunk) <= 3:
                 for res in batch_results:
-                    if res.status == "ok" and not res.top_regions and not res.top_keywords:
+                    if res.status == "ok" and not res.top_regions:
                         try:
                             dt_text = session.fetch_domain_details(res.domain)
                             if dt_text:
@@ -182,15 +190,9 @@ def run_batch(
                                     res.top_regions = regs
                                 if kws:
                                     res.top_keywords = kws
+                                cache.put(res)
                         except Exception:
                             pass
-
-            for res in batch_results:
-                cache.put(res)
-                outcome.fetched += 1
-                emit(res)
-            if batch_cb:
-                batch_cb(bi + 1, len(batches), batch_results)
 
             # 3) auto-backoff khi nghi bị chặn
             if _is_bad_batch(batch_results):
