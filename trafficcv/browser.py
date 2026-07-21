@@ -127,8 +127,13 @@ class BrowserSession:
                 page.wait_for_timeout(3500)
                 if is_challenge_page(page):
                     raise ChallengeBlocked(url)
-            # Đợi React render xong các card kết quả.
-            page.wait_for_timeout(self.render_wait_ms)
+            # Đợi linh hoạt cho tới khi React render đủ tất cả các card (tối đa 4 giây)
+            target_count = len(chunk)
+            for _ in range(20):
+                txt = page.inner_text("body")
+                if txt.upper().count("TOTAL VISITS") >= target_count:
+                    return txt
+                page.wait_for_timeout(200)
             return page.inner_text("body")
         finally:
             if page:

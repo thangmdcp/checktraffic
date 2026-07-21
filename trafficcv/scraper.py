@@ -319,7 +319,7 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
                 matched_dom = req_lower[norm]
             else:
                 for rd in req_lower:
-                    if rd in line_clean or line_clean in rd:
+                    if rd in line_clean or (len(line_clean) >= 4 and "." in line_clean and line_clean in rd):
                         matched_dom = req_lower[rd]
                         break
 
