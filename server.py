@@ -9,35 +9,41 @@ from __future__ import annotations
 
 import os
 import sys
+from starlette.routing import Mount
 
 PORT = int(os.getenv("PORT", "8501"))
 
-# Monkeypatch Streamlit internal Starlette app factory
+# Patch Streamlit Starlette app creation modules BEFORE server starts
 try:
+    import streamlit.web.server.starlette.starlette_server as st_ss
+    import streamlit.web.server.starlette.starlette_app as st_app_mod
     import streamlit.web.server.starlette as st_starlette
     from api import api_app
 
-    orig_create_app = st_starlette.create_starlette_app
+    orig_create_app = st_ss.create_starlette_app
 
     def custom_create_starlette_app(runtime):
         app = orig_create_app(runtime)
-        # Mount FastAPI REST API app at /api prefix
-        app.mount("/api", api_app)
+        # Insert /api Mount at index 0 BEFORE Streamlit SPA catch-all routes!
+        app.routes.insert(0, Mount("/api", app=api_app))
+        sys.__stdout__.write("\n🚀 Successfully mounted FastAPI REST API (/api) at index 0 of Starlette routes.\n")
+        sys.__stdout__.flush()
         return app
 
+    st_ss.create_starlette_app = custom_create_starlette_app
+    st_app_mod.create_starlette_app = custom_create_starlette_app
     st_starlette.create_starlette_app = custom_create_starlette_app
-    print("🚀 Successfully integrated FastAPI REST API (/api) into Streamlit Starlette engine.")
+
 except Exception as exc:
     print(f"⚠️ Warning: Could not patch Starlette app: {exc}")
 
 if __name__ == "__main__":
-    import streamlit.web.cli as stcli
+    import streamlit.web.bootstrap as bootstrap
 
-    sys.argv = [
-        "streamlit", "run", "app.py",
-        f"--server.port={PORT}",
-        "--server.address=0.0.0.0",
-        "--server.headless=true",
-        "--browser.gatherUsageStats=false"
-    ]
-    sys.exit(stcli.main())
+    flag_options = {
+        "server_port": PORT,
+        "server_address": "0.0.0.0",
+        "server_headless": True,
+        "browser_gatherUsageStats": False,
+    }
+    bootstrap.run("app.py", False, [], flag_options)
