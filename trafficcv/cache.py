@@ -87,6 +87,12 @@ class Cache:
             if col not in existing:
                 coltype = "INTEGER" if col == "monthly_visits" else "TEXT"
                 self.conn.execute(f"ALTER TABLE traffic ADD COLUMN {col} {coltype}")
+        # Xóa tự động tất cả các bản ghi cache cũ bị lỗi hoặc rỗng số liệu
+        try:
+            self.conn.execute("DELETE FROM traffic WHERE status != 'ok' OR monthly_visits_raw IS NULL OR monthly_visits_raw = 'N/A'")
+            self.conn.commit()
+        except Exception:
+            pass
 
     def get(self, domain: str) -> Optional[TrafficResult]:
         """Kết quả 'ok' còn hạn cho domain, hoặc None. Không cache lỗi/blocked."""

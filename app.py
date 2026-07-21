@@ -55,6 +55,16 @@ with st.sidebar:
 
     use_cache = st.toggle("Dùng cache dữ liệu", value=True)
     ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, 90, disabled=not use_cache)
+    if st.button("🗑️ Xóa Bộ Nhớ Cache", use_container_width=True):
+        try:
+            from trafficcv.cache import Cache
+            c = Cache()
+            c.conn.execute("DELETE FROM traffic")
+            c.conn.commit()
+            c.close()
+            st.toast("Đã xóa sạch bộ nhớ cache!", icon="🧹")
+        except Exception:
+            pass
 
     st.markdown('<div style="font-size: 14px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">🌐 Proxy & Serper Key</div>', unsafe_allow_html=True)
     server_proxies = load_proxies()
