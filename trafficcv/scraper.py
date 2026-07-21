@@ -273,21 +273,35 @@ def parse_number(text: str) -> Optional[int]:
 
 # ---------- parse trang bulk ----------
 def _value_after(seg: list[str], label: str) -> Optional[str]:
-    """Trả về dòng giá trị (không rỗng) ngay sau ``label`` trong đoạn text của card."""
+    """Trả về dòng giá trị (không rỗng) ngay sau ``label`` (không phân biệt hoa thường)."""
+    lbl_lower = label.lower().strip()
     for j, line in enumerate(seg):
-        if line == label:
+        if line.lower().strip() == lbl_lower:
             for k in range(j + 1, len(seg)):
-                if seg[k]:
-                    return seg[k]
+                if seg[k].strip():
+                    return seg[k].strip()
             return None
     return None
 
 
-def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]:
-    """Bóc kết quả cho từng domain được yêu cầu từ text của trang bulk.
+def extract_visits_and_change(seg: list[str]) -> tuple[Optional[str], Optional[str]]:
+    """Tách Total Visits và % thay đổi (cho dù nằm chung dòng hay khác dòng)."""
+    lbl_lower = "total visits"
+    for j, line in enumerate(seg):
+        if line.lower().strip() == lbl_lower:
+            if j + 1 < len(seg):
+                raw1 = seg[j + 1].strip()
+                visits_str, change = split_visits_raw(raw1)
+                if not change and j + 2 < len(seg):
+                    raw2 = seg[j + 2].strip()
+                    if re.match(r"^[+-]?\s*[0-9.,]+%$", raw2):
+                        change = raw2.replace(" ", "")
+                return visits_str, change
+    return None, None
 
-    Domain không xuất hiện trong kết quả (traffic.cv không có dữ liệu) → not_found.
-    """
+
+def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]:
+    """Bóc kết quả cho từng domain được yêu cầu từ text của trang bulk."""
     lines = [l.strip() for l in (body_text or "").splitlines() if l.strip()]
     req_lower = {d.lower(): d for d in requested}
 
@@ -317,28 +331,23 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
     for idx, (start, dom) in enumerate(cards):
         end = cards[idx + 1][0] if idx + 1 < len(cards) else len(lines)
         seg = lines[start:end]
-        raw = _value_after(seg, "Total Visits")
-        if raw is None:
-            for j, sline in enumerate(seg):
-                if "total visits" in sline.lower() and j + 1 < len(seg):
-                    raw = seg[j + 1]
-                    break
 
-        if raw is None:
+        visits_str, change = extract_visits_and_change(seg)
+        if visits_str is None:
             out[dom] = TrafficResult(dom, status="not_found", error="Không thấy Total Visits")
             continue
 
-        visits_str, change = split_visits_raw(raw)
+        raw_num = f"{visits_str}{change or ''}"
         out[dom] = TrafficResult(
             domain=dom,
-            monthly_visits=parse_number(raw),
+            monthly_visits=parse_number(visits_str),
             monthly_visits_raw=visits_str,
             change=change,
             trend=trend_label(change),
             pages_per_visit=_value_after(seg, "Pages per Visit"),
             avg_duration=_value_after(seg, "Avg. Duration"),
             bounce_rate=_value_after(seg, "Bounce Rate"),
-            registration=_value_after(seg, "Registration"),
+            registration=_value_after(seg, "Registered") or _value_after(seg, "Registration"),
         )
 
     for dom in requested:

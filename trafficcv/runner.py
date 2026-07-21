@@ -178,22 +178,6 @@ def run_batch(
                     emit(res)
                 if batch_cb:
                     batch_cb(bi + 1, len(batches), batch_results)
-
-                # Chỉ cào thêm Top Regions & Keywords khi người dùng check ĐÚNG 1 LINK DUY NHẤT
-                if session and len(domains) == 1:
-                    for res in batch_results:
-                        if res.status == "ok" and not res.top_regions:
-                            try:
-                                dt_text = session.fetch_domain_details(res.domain)
-                                if dt_text:
-                                    regs, kws = parse_domain_details(dt_text)
-                                    if regs:
-                                        res.top_regions = regs
-                                    if kws:
-                                        res.top_keywords = kws
-                                    cache.put(res)
-                            except Exception:
-                                pass
             except Exception as b_err:
                 batch_results = [TrafficResult(d, status="error", error=f"Lỗi: {b_err}") for d in chunk]
                 for res in batch_results:
