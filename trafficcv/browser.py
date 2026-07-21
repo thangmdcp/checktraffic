@@ -123,7 +123,9 @@ class BrowserSession:
         assert page is not None
         page.goto(url, wait_until="domcontentloaded")
         if is_challenge_page(page):
-            raise ChallengeBlocked(url)
+            page.wait_for_timeout(3500)
+            if is_challenge_page(page):
+                raise ChallengeBlocked(url)
         # Đợi React render xong các card kết quả.
         page.wait_for_timeout(self.render_wait_ms)
         return page.inner_text("body")

@@ -276,7 +276,7 @@ def _value_after(seg: list[str], label: str) -> Optional[str]:
     """Trả về dòng giá trị (không rỗng) ngay sau ``label`` (không phân biệt hoa thường)."""
     lbl_lower = label.lower().strip()
     for j, line in enumerate(seg):
-        if line.lower().strip() == lbl_lower:
+        if lbl_lower in line.lower():
             for k in range(j + 1, len(seg)):
                 if seg[k].strip():
                     return seg[k].strip()
@@ -286,9 +286,9 @@ def _value_after(seg: list[str], label: str) -> Optional[str]:
 
 def extract_visits_and_change(seg: list[str]) -> tuple[Optional[str], Optional[str]]:
     """Tách Total Visits và % thay đổi (cho dù nằm chung dòng hay khác dòng)."""
-    lbl_lower = "total visits"
     for j, line in enumerate(seg):
-        if line.lower().strip() == lbl_lower:
+        l_low = line.lower()
+        if "total visits" in l_low or "visits" in l_low or "monthly visits" in l_low:
             if j + 1 < len(seg):
                 raw1 = seg[j + 1].strip()
                 visits_str, change = split_visits_raw(raw1)
@@ -319,7 +319,7 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
                 matched_dom = req_lower[norm]
             else:
                 for rd in req_lower:
-                    if rd in line_clean:
+                    if rd in line_clean or line_clean in rd:
                         matched_dom = req_lower[rd]
                         break
 
