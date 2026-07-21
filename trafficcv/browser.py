@@ -115,20 +115,27 @@ class BrowserSession:
 
     def fetch_bulk(self, domains: list[str]) -> str:
         """Mở /bulk cho tối đa 10 domain, trả về inner_text của body sau khi render."""
-        if not domains:
+        if not domains or not self._context:
             return ""
         chunk = domains[:BULK_MAX]
         url = f"{BASE_URL}/bulk?domains=" + quote(",".join(chunk), safe=",")
-        page = self.page
-        assert page is not None
-        page.goto(url, wait_until="domcontentloaded")
-        if is_challenge_page(page):
-            page.wait_for_timeout(3500)
+        page = None
+        try:
+            page = self._context.new_page()
+            page.goto(url, wait_until="domcontentloaded")
             if is_challenge_page(page):
-                raise ChallengeBlocked(url)
-        # Đợi React render xong các card kết quả.
-        page.wait_for_timeout(self.render_wait_ms)
-        return page.inner_text("body")
+                page.wait_for_timeout(3500)
+                if is_challenge_page(page):
+                    raise ChallengeBlocked(url)
+            # Đợi React render xong các card kết quả.
+            page.wait_for_timeout(self.render_wait_ms)
+            return page.inner_text("body")
+        finally:
+            if page:
+                try:
+                    page.close()
+                except Exception:
+                    pass
 
     def fetch_domain_details(self, domain: str) -> str:
         """Mở trang https://traffic.cv/<domain> trên tab tạm thời để lấy Top Regions & Keywords."""
