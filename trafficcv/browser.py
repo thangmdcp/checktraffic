@@ -126,10 +126,6 @@ class BrowserSession:
             raise ChallengeBlocked(url)
         # Đợi React render xong các card kết quả.
         page.wait_for_timeout(self.render_wait_ms)
-        try:
-            page.wait_for_load_state("networkidle", timeout=12000)
-        except PWTimeout:
-            pass
         return page.inner_text("body")
 
     def fetch_domain_details(self, domain: str) -> str:
