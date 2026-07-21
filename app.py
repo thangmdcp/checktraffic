@@ -622,6 +622,41 @@ if st.session_state.get("results"):
     if len(results) > MAX_TABLE_ROWS:
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(results)} dòng — tải file để xem đầy đủ.")
 
+    # Soi Chi Tiết Top Quốc Gia & Từ Khóa
+    domains_with_details = [r for r in results if r.status == "ok" and (r.top_regions or r.top_keywords)]
+    if domains_with_details:
+        st.markdown('<div class="table-title"><span class="mi" style="font-size:19px">analytics</span>'
+                    'Soi Chi Tiết: Top Quốc Gia & Từ Khóa (SEO Keywords)</div>', unsafe_allow_html=True)
+        
+        sel_domain_name = st.selectbox(
+            "Chọn website để xem chi tiết Quốc Gia & Từ Khóa:",
+            options=[r.domain for r in domains_with_details],
+            key="sel_domain_details"
+        )
+        
+        target_res = next((r for r in domains_with_details if r.domain == sel_domain_name), None)
+        if target_res:
+            col_reg, col_kw = st.columns(2)
+            with col_reg:
+                with st.container(border=True):
+                    st.markdown('**🌍 Top 5 Quốc Gia Mang Lại Traffic**')
+                    if target_res.top_regions:
+                        df_reg = pd.DataFrame(target_res.top_regions)
+                        df_reg.columns = ["Quốc Gia", "Tỷ Lệ % Traffic"]
+                        st.table(df_reg)
+                    else:
+                        st.caption("Chưa có dữ liệu quốc gia.")
+            
+            with col_kw:
+                with st.container(border=True):
+                    st.markdown('**🔑 Top 5 Từ Khóa & Search Volume**')
+                    if target_res.top_keywords:
+                        df_kw = pd.DataFrame(target_res.top_keywords)
+                        df_kw.columns = ["Từ Khóa", "Traffic", "Volume/Tháng", "Giá CPC"]
+                        st.table(df_kw)
+                    else:
+                        st.caption("Chưa có dữ liệu từ khóa.")
+
     # khoảng cách giữa bảng và nút tải
     st.markdown('<div style="height:26px"></div>', unsafe_allow_html=True)
     dl1, dl2 = st.columns(2)

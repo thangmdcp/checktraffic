@@ -26,7 +26,7 @@ import httpx
 from .browser import BrowserSession, BULK_MAX
 from .cache import Cache
 from .scraper import (TrafficResult, get_traffic_bulk, normalize_list, normalize_domain,
-                      parse_brand_list, looks_like_domain, chunked)
+                      parse_brand_list, parse_domain_details, looks_like_domain, chunked)
 from .brand import find_website, SerperExhausted
 
 ProgressCb = Callable[[int, int, TrafficResult], None]
@@ -169,6 +169,21 @@ def run_batch(
             results_map = get_traffic_bulk(session, chunk)
             batch_results = [results_map.get(
                 d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
+
+            # Bóc thêm Top Regions & Top Keywords cho các domain thành công
+            if session:
+                for res in batch_results:
+                    if res.status == "ok" and not res.top_regions and not res.top_keywords:
+                        try:
+                            dt_text = session.fetch_domain_details(res.domain)
+                            if dt_text:
+                                regs, kws = parse_domain_details(dt_text)
+                                if regs:
+                                    res.top_regions = regs
+                                if kws:
+                                    res.top_keywords = kws
+                        except Exception:
+                            pass
 
             for res in batch_results:
                 cache.put(res)

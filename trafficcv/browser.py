@@ -131,3 +131,19 @@ class BrowserSession:
         except PWTimeout:
             pass
         return page.inner_text("body")
+
+    def fetch_domain_details(self, domain: str) -> str:
+        """Mở trang https://traffic.cv/<domain> để lấy chi tiết Top Regions & Top Keywords."""
+        if not domain:
+            return ""
+        url = f"{BASE_URL}/{quote(domain.strip())}"
+        page = self.page
+        assert page is not None
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+            if is_challenge_page(page):
+                return ""
+            page.wait_for_timeout(self.render_wait_ms)
+            return page.inner_text("body")
+        except Exception:
+            return ""

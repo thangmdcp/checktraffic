@@ -75,11 +75,96 @@ class TrafficResult:
     avg_duration: Optional[str] = None
     bounce_rate: Optional[str] = None
     registration: Optional[str] = None         # ngày đăng ký domain, vd "1999-11-9"
+    top_regions: Optional[list[dict]] = None    # Top 5 quốc gia: [{"country": "US", "share": "25.02%"}]
+    top_keywords: Optional[list[dict]] = None   # Top 5 từ khóa: [{"keyword": "...", "traffic": "...", "volume": "...", "cpc": "..."}]
     status: str = "ok"                           # ok | not_found | blocked | error
     error: Optional[str] = None
+    cache_hit: bool = False
 
     def as_row(self) -> dict:
         return asdict(self)
+
+
+def parse_domain_details(text: str) -> tuple[list[dict], list[dict]]:
+    """Parse text từ trang đơn https://traffic.cv/<domain> để bóc Top Regions & Top Keywords."""
+    regions: list[dict] = []
+    keywords: list[dict] = []
+
+    if not text:
+        return regions, keywords
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # 1. Parse Top Regions
+    try:
+        if "TOP REGIONS" in text.upper():
+            idx = -1
+            for i, line in enumerate(lines):
+                if "TOP REGIONS" in line.upper():
+                    idx = i
+                    break
+            if idx != -1:
+                curr = idx + 1
+                while curr < len(lines) and len(regions) < 5:
+                    line = lines[curr]
+                    if "TOP KEYWORDS" in line.upper():
+                        break
+                    if curr + 1 < len(lines) and re.match(r"^[0-9.]+\s*%$", lines[curr + 1]):
+                        country = line
+                        share = lines[curr + 1]
+                        if country.lower() not in ("region", "share", "traffic %", "top regions"):
+                            regions.append({"country": country, "share": share})
+                        curr += 2
+                    else:
+                        curr += 1
+    except Exception:
+        pass
+
+    # 2. Parse Top Keywords
+    try:
+        if "TOP KEYWORDS" in text.upper():
+            idx = -1
+            for i, line in enumerate(lines):
+                if "TOP KEYWORDS" in line.upper():
+                    idx = i
+                    break
+            if idx != -1:
+                curr = idx + 1
+                while curr < len(lines) and len(keywords) < 5:
+                    line = lines[curr]
+                    if line.lower() in ("keyword", "traffic", "volume", "cpc", "top keywords"):
+                        curr += 1
+                        continue
+                    m = re.search(r"^(.*?)\s+([0-9.,]+[KMB]?)\s+([0-9.,]+[KMB]?)\s+(\$?[0-9.,]+)$", line, re.I)
+                    if m:
+                        keywords.append({
+                            "keyword": m.group(1).strip(),
+                            "traffic": m.group(2).strip(),
+                            "volume": m.group(3).strip(),
+                            "cpc": m.group(4).strip()
+                        })
+                        curr += 1
+                    elif curr + 3 < len(lines):
+                        kw = line
+                        trf = lines[curr + 1]
+                        vol = lines[curr + 2]
+                        cpc = lines[curr + 3]
+                        if re.match(r"^[0-9.,]+[KMB]?$", trf, re.I) and re.match(r"^\$?[0-9.,]+$", cpc, re.I):
+                            keywords.append({
+                                "keyword": kw,
+                                "traffic": trf,
+                                "volume": vol,
+                                "cpc": cpc
+                            })
+                            curr += 4
+                        else:
+                            curr += 1
+                    else:
+                        curr += 1
+    except Exception:
+        pass
+
+    return regions, keywords
 
 
 # ---------- chuẩn hóa input ----------

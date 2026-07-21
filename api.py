@@ -58,6 +58,8 @@ class TrafficItem(BaseModel):
     pages_per_visit: str
     avg_duration: str
     bounce_rate: str
+    top_regions: Optional[List[dict]] = Field(default=None, description="Top 5 quốc gia có lượng traffic lớn nhất (country, share)")
+    top_keywords: Optional[List[dict]] = Field(default=None, description="Top 5 từ khóa mang lại traffic (keyword, traffic, volume, cpc)")
     status: str
     cache_hit: bool
 
@@ -70,7 +72,7 @@ class CheckResponse(BaseModel):
 
 @api_app.get("/health", summary="Kiểm tra trạng thái API")
 def health_check():
-    return {"status": "ok", "service": "CheckTraffic API", "version": "1.0.0"}
+    return {"status": "ok", "service": "CheckTraffic API", "version": "1.1.0"}
 
 
 @api_app.get("/cache", summary="Tra cứu dữ liệu nhanh từ Cache")
@@ -90,6 +92,8 @@ def get_cached_domain(domain: str = Query(..., description="Root domain (ví d�
             "pages_per_visit": res.pages_per_visit,
             "avg_duration": res.avg_duration,
             "bounce_rate": res.bounce_rate,
+            "top_regions": res.top_regions,
+            "top_keywords": res.top_keywords,
             "status": res.status,
             "cache_hit": True
         }
@@ -151,6 +155,8 @@ def check_traffic(req: CheckRequest):
             pages_per_visit=r.pages_per_visit or "N/A",
             avg_duration=r.avg_duration or "N/A",
             bounce_rate=r.bounce_rate or "N/A",
+            top_regions=r.top_regions,
+            top_keywords=r.top_keywords,
             status=r.status,
             cache_hit=r.cache_hit
         ))

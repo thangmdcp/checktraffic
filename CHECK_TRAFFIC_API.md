@@ -39,6 +39,13 @@
         "pages_per_visit": "2.8",
         "bounce_rate": "28.5%",
         "avg_duration": "10:30",
+        "top_regions": [
+          {"country": "United States", "share": "25.02%"},
+          {"country": "India", "share": "6.31%"}
+        ],
+        "top_keywords": [
+          {"keyword": "google", "traffic": "18.28K", "volume": "13.68K", "cpc": "$23.72"}
+        ],
         "status": "ok",
         "cache_hit": true
       },

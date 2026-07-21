@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import json
 from .scraper import TrafficResult
 
 DEFAULT_DB = os.getenv(
@@ -18,7 +19,8 @@ DEFAULT_TTL = 90 * 24 * 3600  # 90 ngày
 
 # Các cột dữ liệu (khớp tên field của TrafficResult), không gồm domain/status/fetched_at.
 _FIELDS = ("monthly_visits", "monthly_visits_raw", "change", "trend",
-           "pages_per_visit", "avg_duration", "bounce_rate", "registration")
+           "pages_per_visit", "avg_duration", "bounce_rate", "registration",
+           "top_regions", "top_keywords")
 
 
 class Cache:
@@ -37,6 +39,8 @@ class Cache:
                 avg_duration TEXT,
                 bounce_rate TEXT,
                 registration TEXT,
+                top_regions TEXT,
+                top_keywords TEXT,
                 status TEXT,
                 fetched_at REAL
             )
@@ -96,17 +100,39 @@ class Cache:
         *vals, status, fetched_at = row
         if status != "ok" or (time.time() - fetched_at) > self.ttl:
             return None
-        return TrafficResult(domain, **dict(zip(_FIELDS, vals)), status="ok")
+
+        data = dict(zip(_FIELDS, vals))
+        if data.get("top_regions") and isinstance(data["top_regions"], str):
+            try:
+                data["top_regions"] = json.loads(data["top_regions"])
+            except Exception:
+                data["top_regions"] = None
+        if data.get("top_keywords") and isinstance(data["top_keywords"], str):
+            try:
+                data["top_keywords"] = json.loads(data["top_keywords"])
+            except Exception:
+                data["top_keywords"] = None
+
+        return TrafficResult(domain, status="ok", cache_hit=True, **data)
 
     def put(self, result: TrafficResult, now: Optional[float] = None) -> None:
         if result.status != "ok":
             return  # chỉ lưu kết quả thành công
         cols = ", ".join(_FIELDS)
         placeholders = ", ".join("?" for _ in _FIELDS)
+
+        val_dict = result.as_row()
+        row_vals = []
+        for f in _FIELDS:
+            v = val_dict.get(f)
+            if f in ("top_regions", "top_keywords") and isinstance(v, (list, dict)):
+                v = json.dumps(v, ensure_ascii=False)
+            row_vals.append(v)
+
         self.conn.execute(
             f"INSERT OR REPLACE INTO traffic (domain, {cols}, status, fetched_at) "
             f"VALUES (?, {placeholders}, ?, ?)",
-            (result.domain, *(getattr(result, f) for f in _FIELDS),
+            (result.domain, *row_vals,
              result.status, now if now is not None else time.time()),
         )
         self.conn.commit()
