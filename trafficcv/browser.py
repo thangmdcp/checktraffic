@@ -62,8 +62,8 @@ class BrowserSession:
         headless: Optional[bool] = None,
         proxy: Optional[str] = None,
         user_agent: str = DEFAULT_UA,
-        nav_timeout: float = 30.0,
-        render_wait_ms: int = 3500,
+        nav_timeout: float = 20.0,
+        render_wait_ms: int = 2000,
     ):
         if headless is None:
             headless = os.getenv("TRAFFICCV_HEADLESS", "1") != "0"
