@@ -122,7 +122,29 @@ with st.sidebar:
                           if k.strip() and not k.strip().startswith("#")]
     serper_keys = custom_serper_keys or server_serper_keys
     
-    # Tự động lưu lại thiết lập mỗi khi thay đổi
+    st.caption(f":material/key: {len(serper_keys)} Serper key sẵn sàng")
+    if server_serper_keys and not custom_serper_keys:
+        st.caption(":material/lock: Key server được bảo vệ an toàn")
+
+    st.divider()
+    st.markdown('<div style="font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Bộ Lọc Dữ Liệu</div>', unsafe_allow_html=True)
+    
+    filter_on_val = saved_conf.get("filter_on", False)
+    filter_on = st.toggle("Bật bộ lọc traffic", value=filter_on_val)
+    
+    min_txt_val = saved_conf.get("min_txt", "5k")
+    min_txt = st.text_input("Lượng traffic tối thiểu", value=min_txt_val, disabled=not filter_on, placeholder="vd 5k, 1M")
+    
+    max_txt_val = saved_conf.get("max_txt", "")
+    max_txt = st.text_input("Lượng traffic tối đa", value=max_txt_val, disabled=not filter_on, placeholder="không giới hạn")
+    
+    keep_unknown_val = saved_conf.get("keep_unknown", False)
+    keep_unknown = st.toggle("Giữ web không có dữ liệu", value=keep_unknown_val, disabled=not filter_on)
+    
+    drop_no_site_val = saved_conf.get("drop_no_site", False)
+    drop_no_site = st.toggle("Bỏ brand không tìm thấy web", value=drop_no_site_val, disabled=not filter_on)
+
+    # Tự động lưu lại toàn bộ thiết lập mỗi khi thay đổi
     current_conf = {
         "theme": theme_name,
         "speed": speed,
@@ -132,21 +154,14 @@ with st.sidebar:
         "concurrency": int(concurrency),
         "proxy_input": proxy_text,
         "serper_input": serper_text,
+        "filter_on": filter_on,
+        "min_txt": min_txt,
+        "max_txt": max_txt,
+        "keep_unknown": keep_unknown,
+        "drop_no_site": drop_no_site,
     }
     if current_conf != saved_conf:
         save_settings(current_conf)
-
-    st.caption(f":material/key: {len(serper_keys)} Serper key sẵn sàng")
-    if server_serper_keys and not custom_serper_keys:
-        st.caption(":material/lock: Key server được bảo vệ an toàn")
-
-    st.divider()
-    st.markdown('<div style="font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Bộ Lọc Dữ Liệu</div>', unsafe_allow_html=True)
-    filter_on = st.toggle("Bật bộ lọc traffic", value=False)
-    min_txt = st.text_input("Lượng traffic tối thiểu", value="5k", disabled=not filter_on, placeholder="vd 5k, 1M")
-    max_txt = st.text_input("Lượng traffic tối đa", value="", disabled=not filter_on, placeholder="không giới hạn")
-    keep_unknown = st.toggle("Giữ web không có dữ liệu", value=False, disabled=not filter_on)
-    drop_no_site = st.toggle("Bỏ brand không tìm thấy web", value=False, disabled=not filter_on)
 
     st.divider()
     with st.expander("🔌 REST API cho Developer", expanded=False):
