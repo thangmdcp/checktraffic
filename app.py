@@ -19,6 +19,29 @@ from trafficcv.excel import results_to_dataframe, results_to_xlsx_bytes, results
 
 st.set_page_config(page_title="Check Traffic Hàng Loạt", page_icon="📈", layout="wide")
 
+# ---- Cấu hình lưu trữ cài đặt (settings.json) ----
+import json
+from pathlib import Path
+
+SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
+
+def load_saved_settings() -> dict:
+    if SETTINGS_FILE.exists():
+        try:
+            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+def save_settings(data: dict):
+    try:
+        SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+saved_conf = load_saved_settings()
+
+
 # ---- Tokens cố định (theo design system 'Dashboard') ----
 PRIMARY, ACCENT = "#4F46E5", "#8B5CF6"
 CYAN = "#06B6D4"
@@ -48,15 +71,21 @@ THEMES = {
 # ================================ Sidebar ================================
 with st.sidebar:
     st.markdown('<div style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #6366F1; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span class="mi" style="font-size: 24px;">tune</span> Cấu Hình SaaS</div>', unsafe_allow_html=True)
-    theme_name = st.radio("Giao diện", ["Sáng", "Tối"], index=0, horizontal=True, key="theme")
+    theme_index = 1 if saved_conf.get("theme") == "Tối" else 0
+    theme_name = st.radio("Giao diện", ["Sáng", "Tối"], index=theme_index, horizontal=True, key="theme")
 
-    speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value="Vừa")
+    speed_val = saved_conf.get("speed", "Vừa")
+    speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value=speed_val)
     min_delay, max_delay = {"An toàn": (6.0, 12.0), "Vừa": (3.0, 8.0), "Nhanh": (1.5, 4.0)}[speed]
 
-    use_cache = st.toggle("Dùng cache dữ liệu", value=True)
-    ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, 90, disabled=not use_cache)
-    use_parallel = st.toggle("Quét song song (Nhanh)", value=True, help="Mở nhiều trình duyệt Chromium chạy song song để tăng tốc độ lên gấp nhiều lần.")
-    concurrency = st.slider("Số luồng chạy song song", 1, 5, 3, disabled=not use_parallel) if use_parallel else 1
+    use_cache_val = saved_conf.get("use_cache", True)
+    use_cache = st.toggle("Dùng cache dữ liệu", value=use_cache_val)
+    ttl_days_val = int(saved_conf.get("ttl_days", 90))
+    ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, ttl_days_val, disabled=not use_cache)
+    use_parallel_val = saved_conf.get("use_parallel", True)
+    use_parallel = st.toggle("Quét song song (Nhanh)", value=use_parallel_val, help="Mở nhiều trình duyệt Chromium chạy song song để tăng tốc độ lên gấp nhiều lần.")
+    concurrency_val = int(saved_conf.get("concurrency", 3))
+    concurrency = st.slider("Số luồng chạy song song", 1, 5, concurrency_val, disabled=not use_parallel) if use_parallel else 1
 
     if st.button("🗑️ Xóa Bộ Nhớ Cache", use_container_width=True):
         try:
@@ -72,8 +101,9 @@ with st.sidebar:
 
     st.markdown('<div style="font-size: 14px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">🌐 Proxy & Serper Key</div>', unsafe_allow_html=True)
     server_proxies = load_proxies()
+    proxy_val = saved_conf.get("proxy_input", "")
     proxy_text = st.text_area("Proxy riêng (tùy chọn)",
-                              value="", height=78, key="proxy_input",
+                              value=proxy_val, height=78, key="proxy_input",
                               placeholder="http://host:port\nhttp://user:pass@host:port")
     custom_proxies = [ln.strip() for ln in proxy_text.splitlines()
                       if ln.strip() and not ln.strip().startswith("#")]
@@ -84,12 +114,28 @@ with st.sidebar:
         st.caption(":material/lock: Đang dùng proxy mặc định trên server")
 
     server_serper_keys = load_serper_keys()
+    serper_val = saved_conf.get("serper_input", "")
     serper_text = st.text_area("Serper API Key (cho TÊN BRAND)",
-                               value="", height=78, key="serper_input",
+                               value=serper_val, height=78, key="serper_input",
                                placeholder="dán API key serper.dev…")
     custom_serper_keys = [k.strip() for k in serper_text.splitlines()
                           if k.strip() and not k.strip().startswith("#")]
     serper_keys = custom_serper_keys or server_serper_keys
+    
+    # Tự động lưu lại thiết lập mỗi khi thay đổi
+    current_conf = {
+        "theme": theme_name,
+        "speed": speed,
+        "use_cache": use_cache,
+        "ttl_days": int(ttl_days),
+        "use_parallel": use_parallel,
+        "concurrency": int(concurrency),
+        "proxy_input": proxy_text,
+        "serper_input": serper_text,
+    }
+    if current_conf != saved_conf:
+        save_settings(current_conf)
+
     st.caption(f":material/key: {len(serper_keys)} Serper key sẵn sàng")
     if server_serper_keys and not custom_serper_keys:
         st.caption(":material/lock: Key server được bảo vệ an toàn")
