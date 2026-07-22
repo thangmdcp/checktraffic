@@ -285,7 +285,7 @@ def run_auto_batch(
     progress_cb: Optional[ProgressCb] = None,
     batch_cb: Optional[BatchCb] = None,
     should_stop: Optional[Callable[[], bool]] = None,
-    resolve_workers: int = 4,
+    resolve_workers: int = 10,
 ) -> BatchOutcome:
     """Tự nhận diện mỗi dòng là DOMAIN hay TÊN BRAND.
 
