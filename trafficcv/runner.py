@@ -67,6 +67,7 @@ class RunSettings:
     restart_every: int = 40               # khởi động lại trình duyệt sau mỗi N lô
     backoff_after: int = 2                # số lô-bị-chặn liên tiếp trước khi nghỉ dài
     cooldown: float = 90.0                # thời gian nghỉ dài khi nghi bị chặn (giây)
+    concurrency: int = 1                  # số luồng quét song song (1 = tuần tự)
 
 
 @dataclass
@@ -147,6 +148,67 @@ def run_batch(
         batches = chunked(to_fetch, BULK_MAX)
         proxy_idx = 0
         consecutive_bad = 0
+
+        if settings.concurrency > 1:
+            import threading
+            from concurrent.futures import ThreadPoolExecutor
+
+            emit_lock = threading.Lock()
+
+            def safe_emit(res: TrafficResult):
+                nonlocal done
+                with emit_lock:
+                    done += 1
+                    outcome.results.append(res)
+                    if progress_cb:
+                        progress_cb(done, total, res)
+
+            def worker(chunk_idx: int, chunk: list[str]):
+                if should_stop and should_stop():
+                    return
+                t_cache = Cache(ttl=settings.ttl)
+                proxy = proxies[chunk_idx % len(proxies)] if proxies else None
+                t_session = BrowserSession(headless=settings.headless, proxy=proxy)
+                try:
+                    with t_session:
+                        results_map = get_traffic_bulk(t_session, chunk)
+                        batch_results = [
+                            results_map.get(d, TrafficResult(d, status="error", error="Thiếu kết quả"))
+                            for d in chunk
+                        ]
+                        for res in batch_results:
+                            t_cache.put(res)
+                            with emit_lock:
+                                outcome.fetched += 1
+                            safe_emit(res)
+                        if batch_cb:
+                            batch_cb(chunk_idx + 1, len(batches), batch_results)
+                except Exception as b_err:
+                    batch_results = [
+                        TrafficResult(d, status="error", error=f"Lỗi: {b_err}")
+                        for d in chunk
+                    ]
+                    for res in batch_results:
+                        with emit_lock:
+                            outcome.fetched += 1
+                        safe_emit(res)
+                    if batch_cb:
+                        batch_cb(chunk_idx + 1, len(batches), batch_results)
+                finally:
+                    try:
+                        t_cache.close()
+                    except Exception:
+                        pass
+
+            with ThreadPoolExecutor(max_workers=settings.concurrency) as executor:
+                futures = [
+                    executor.submit(worker, bi, chunk)
+                    for bi, chunk in enumerate(batches)
+                ]
+                for fut in futures:
+                    fut.result()
+
+            return outcome
 
         for bi, chunk in enumerate(batches):
             if should_stop and should_stop():

@@ -167,18 +167,20 @@ def parse_domain_details(text: str) -> tuple[list[dict], list[dict]]:
     return regions, keywords
 
 
-# ---------- chuẩn hóa input ----------
 def normalize_domain(raw: str) -> Optional[str]:
     s = (raw or "").strip()
-    if not s:
+    if not s or "[" in s or "]" in s or "{" in s or "}" in s:
         return None
-    if "//" not in s:
-        s = "http://" + s
-    host = urlparse(s).netloc or urlparse(s).path
-    host = host.split("/")[0].split("@")[-1].split(":")[0].strip().lower()
-    if host.startswith("www."):
-        host = host[4:]
-    return host if host and "." in host else None
+    try:
+        if "//" not in s:
+            s = "http://" + s
+        host = urlparse(s).netloc or urlparse(s).path
+        host = host.split("/")[0].split("@")[-1].split(":")[0].strip().lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host if host and "." in host else None
+    except Exception:
+        return None
 
 
 def normalize_list(text: str) -> list[str]:

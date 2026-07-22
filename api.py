@@ -45,6 +45,7 @@ class CheckRequest(BaseModel):
     use_cache: bool = Field(default=True, description="Sử dụng dữ liệu cache gần đây nếu có")
     speed: str = Field(default="Vừa", description="Tốc độ quét: 'An toàn', 'Vừa', 'Nhanh'")
     serper_api_keys: Optional[List[str]] = Field(default=None, description="Danh sách Serper API key tùy chọn cho tên brand")
+    concurrency: int = Field(default=3, description="Số luồng chạy song song (1-5)")
 
 
 class TrafficItem(BaseModel):
@@ -128,6 +129,7 @@ def check_traffic(req: CheckRequest):
         use_cache=req.use_cache,
         headless=True,
         proxies=server_proxies,
+        concurrency=max(1, min(5, req.concurrency)),
     )
 
     results: list[TrafficResult] = []

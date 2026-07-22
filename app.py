@@ -55,6 +55,9 @@ with st.sidebar:
 
     use_cache = st.toggle("Dùng cache dữ liệu", value=True)
     ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, 90, disabled=not use_cache)
+    use_parallel = st.toggle("Quét song song (Nhanh)", value=True, help="Mở nhiều trình duyệt Chromium chạy song song để tăng tốc độ lên gấp nhiều lần.")
+    concurrency = st.slider("Số luồng chạy song song", 1, 5, 3, disabled=not use_parallel) if use_parallel else 1
+
     if st.button("🗑️ Xóa Bộ Nhớ Cache", use_container_width=True):
         try:
             from trafficcv.cache import Cache
@@ -578,7 +581,8 @@ if start:
     else:
         settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=use_cache,
                                ttl=ttl_seconds, headless=True,
-                               proxies=proxies_list if use_proxy else None)
+                               proxies=proxies_list if use_proxy else None,
+                               concurrency=concurrency)
         try:
             outcome = _run_and_stream(preview, settings, serper_keys=serper_keys)
             st.session_state["results"] = outcome.results
