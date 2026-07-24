@@ -331,15 +331,9 @@ with c_head2:
             p_speed_val = saved_conf.get("speed", "Vừa")
             p_speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value=p_speed_val, key="speed_input")
             
-            p_use_cache_val = saved_conf.get("use_cache", True)
-            p_use_cache = st.toggle("Dùng cache dữ liệu", value=p_use_cache_val, key="cache_toggle")
-            
             p_force_refresh_val = saved_conf.get("force_refresh", False)
-            p_force_refresh = st.toggle("⚡ Ép quét mới & Ghi đè", value=p_force_refresh_val, help="Bỏ qua cache, quét mới 100% và ghi đè Supabase.", key="force_toggle")
-            if p_force_refresh:
-                p_use_cache = False
-
-            p_ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, int(saved_conf.get("ttl_days", 90)), disabled=not p_use_cache, key="ttl_input")
+            p_force_refresh = st.toggle("⚡ Quét mới & Ghi đè Supabase", value=p_force_refresh_val, help="Bỏ qua dữ liệu cũ trong Supabase, cào mới 100% từ live web và ghi đè dữ liệu mới vào Supabase.", key="force_toggle")
+            use_cache = not p_force_refresh
             
             p_use_parallel = st.toggle("Quét song song", value=saved_conf.get("use_parallel", True), key="parallel_toggle")
             p_concurrency = st.slider("Số luồng Chromium", 1, 5, int(saved_conf.get("concurrency", 3)), disabled=not p_use_parallel, key="concurrency_input") if p_use_parallel else 1
@@ -440,7 +434,7 @@ with st.container(border=True):
     )
 
     preview = parse_brand_list(st.session_state.get("domains_input", ""))
-    ttl_seconds = int(ttl_days) * 24 * 3600
+    ttl_seconds = 3650 * 24 * 3600  # Vô thời hạn (chỉ làm mới khi bật nút Quét mới & Ghi đè)
     n_domain = sum(1 for x in preview if looks_like_domain(x))
     n_brand = len(preview) - n_domain
 

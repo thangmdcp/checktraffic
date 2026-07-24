@@ -128,6 +128,7 @@ def check_traffic(req: CheckRequest):
         min_delay=min_delay,
         max_delay=max_delay,
         use_cache=False if req.force_refresh else req.use_cache,
+        ttl=3650 * 24 * 3600,
         headless=True,
         proxies=server_proxies,
         concurrency=max(1, min(5, req.concurrency)),

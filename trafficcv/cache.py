@@ -16,7 +16,7 @@ DEFAULT_DB = os.getenv(
     "TRAFFICCV_CACHE_DB",
     str(Path(__file__).resolve().parent.parent / "cache.db"),
 )
-DEFAULT_TTL = 90 * 24 * 3600  # 90 ngày
+DEFAULT_TTL = 3650 * 24 * 3600  # 10 năm (vô thời hạn trừ khi force_refresh)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kwwrzoouitcknzwlcttc.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d3J6b291aXRja256d2xjdHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTI2MzAsImV4cCI6MjA5ODMyODYzMH0.N6O0_RcA_OzyPDQOOqmDRkm0nIRa_uwZK9L59mXswDw")
