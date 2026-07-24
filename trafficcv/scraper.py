@@ -211,12 +211,15 @@ def looks_like_domain(line: str) -> bool:
 
 
 def parse_brand_list(text: str) -> list[str]:
-    """Tách danh sách (mỗi dòng 1 mục: domain HOẶC tên brand), GIỮ NGUYÊN chữ, bỏ trùng/blank."""
+    """Tách danh sách (mỗi dòng 1 mục: domain HOẶC tên brand), loại bỏ dòng trùng / trùng domain."""
     seen, out = set(), []
     for line in (text or "").splitlines():
         name = line.strip()
-        if name and name.lower() not in seen:
-            seen.add(name.lower())
+        if not name:
+            continue
+        norm_key = normalize_domain(name) if looks_like_domain(name) else name.lower()
+        if norm_key and norm_key not in seen:
+            seen.add(norm_key)
             out.append(name)
     return out
 

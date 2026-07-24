@@ -376,20 +376,26 @@ def run_auto_batch(
             outcome.blocked_batches = traffic.blocked_batches
             outcome.cancelled = outcome.cancelled or traffic.cancelled
 
-        # ----- Ghép kết quả theo thứ tự brand -----
+        # ----- Ghép kết quả theo thứ tự brand (lọc trùng domain) -----
+        seen_res = set()
         for brand, dom in pairs:
             if not dom:
                 err_msg = "Không tìm thấy web (Hết lượt Serper API)" if exhausted else "Không tìm thấy website chính thức"
-                outcome.results.append(TrafficResult(
-                    domain="", brand=brand, status="no_website",
-                    error=err_msg))
-            else:
-                base = by_domain.get(dom)
-                if base is not None:
-                    outcome.results.append(replace(base, brand=brand))
-                else:
+                if brand.lower() not in seen_res:
+                    seen_res.add(brand.lower())
                     outcome.results.append(TrafficResult(
-                        domain=dom, brand=brand, status="error", error="Thiếu kết quả traffic"))
+                        domain="", brand=brand, status="no_website",
+                        error=err_msg))
+            else:
+                dom_lower = dom.lower()
+                if dom_lower not in seen_res:
+                    seen_res.add(dom_lower)
+                    base = by_domain.get(dom)
+                    if base is not None:
+                        outcome.results.append(replace(base, brand=brand))
+                    else:
+                        outcome.results.append(TrafficResult(
+                            domain=dom, brand=brand, status="error", error="Thiếu kết quả traffic"))
         return outcome
     finally:
         cache.close()

@@ -27,7 +27,10 @@ _COLUMNS = [
 def results_to_dataframe(results: Iterable[TrafficResult]) -> pd.DataFrame:
     rows = [r.as_row() for r in results]
     df = pd.DataFrame(rows, columns=[k for k, _ in _COLUMNS if k in (rows[0] if rows else {}) or True])
-    return df.rename(columns=dict(_COLUMNS))
+    df = df.rename(columns=dict(_COLUMNS))
+    if "Website" in df.columns:
+        df = df.drop_duplicates(subset=["Website"])
+    return df
 
 
 def results_to_xlsx_bytes(results: Iterable[TrafficResult]) -> bytes:
