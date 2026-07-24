@@ -689,7 +689,11 @@ if start:
             if outcome.aborted_reason:
                 st.error(outcome.aborted_reason)
             else:
-                st.toast("Hoàn tất!", icon="✅")
+                has_exhausted_brand = any(r.status == "no_website" and "Serper" in (r.error or "") for r in outcome.results)
+                if has_exhausted_brand:
+                    st.toast("Đã quét xong các website! (Một số tên brand hết lượt API Serper)", icon="⚠️")
+                else:
+                    st.toast("Hoàn tất quét toàn bộ danh sách!", icon="✅")
         except Exception as e:  # noqa: BLE001
             st.error(f"Lỗi: {type(e).__name__}: {e}")
 

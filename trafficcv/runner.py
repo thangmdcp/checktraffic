@@ -343,8 +343,6 @@ def run_auto_batch(
                 if resolve_cb:
                     resolve_cb(done, total, label, dom)
         pairs = [(labels.get(ln, ln), result_map.get(ln)) for ln in lines]
-        if exhausted:
-            outcome.aborted_reason = "Hết lượt / sai Serper API key — hãy thêm key mới."
 
         # ----- Pha 2: check traffic cho các domain tìm được -----
         domains = []
@@ -367,9 +365,10 @@ def run_auto_batch(
         # ----- Ghép kết quả theo thứ tự brand -----
         for brand, dom in pairs:
             if not dom:
+                err_msg = "Không tìm thấy web (Hết lượt Serper API)" if exhausted else "Không tìm thấy website chính thức"
                 outcome.results.append(TrafficResult(
                     domain="", brand=brand, status="no_website",
-                    error="Không tìm thấy website chính thức"))
+                    error=err_msg))
             else:
                 base = by_domain.get(dom)
                 if base is not None:
