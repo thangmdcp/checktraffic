@@ -660,7 +660,7 @@ def _run_and_stream(items, settings, serper_keys=None):
                             f"còn ~**{int(eta // 60)}m{int(eta % 60):02d}s**")
         elif kind == "batch":
             results.extend(rest[0])
-            table_area.markdown(_table_html(results_to_dataframe(results)), unsafe_allow_html=True)
+            table_area.dataframe(results_to_dataframe(results), use_container_width=True, height=350)
         elif kind == "done":
             prog_box.empty()
             status.empty()

@@ -137,6 +137,76 @@ class Cache:
         except Exception:
             pass
 
+    def get_many(self, domains: list[str]) -> dict[str, TrafficResult]:
+        """Lấy toàn bộ kết quả 'ok' còn hạn cho danh sách domains (SQLite + Supabase bulk query)."""
+        if not domains:
+            return {}
+
+        now = time.time()
+        out: dict[str, TrafficResult] = {}
+        missing: list[str] = []
+
+        # 1. Tra cứu hàng loạt từ SQLite local (1 query SQL duy nhất)
+        cols = ", ".join(_FIELDS)
+        placeholders = ", ".join("?" for _ in domains)
+        try:
+            rows = self.conn.execute(
+                f"SELECT domain, {cols}, status, fetched_at FROM traffic WHERE domain IN ({placeholders})",
+                tuple(domains),
+            ).fetchall()
+
+            for row in rows:
+                dom, *vals, status, fetched_at = row
+                if status == "ok" and (now - fetched_at) <= self.ttl:
+                    data = dict(zip(_FIELDS, vals))
+                    if data.get("monthly_visits_raw") and data.get("monthly_visits_raw") not in ("N/A", "TRAFFIC"):
+                        for k in ("top_regions", "top_keywords"):
+                            if isinstance(data.get(k), str):
+                                try:
+                                    data[k] = json.loads(data[k])
+                                except Exception:
+                                    data[k] = None
+                        out[dom] = TrafficResult(dom, status="ok", cache_hit=True, **data)
+        except Exception:
+            pass
+
+        for d in domains:
+            if d not in out:
+                missing.append(d)
+
+        # 2. Tra cứu hàng loạt từ Supabase Cloud (chỉ 1 HTTP GET request duy nhất)
+        if missing and self.sb_headers:
+            from .scraper import chunked
+            try:
+                for chunk in chunked(missing, 50):
+                    in_clause = ",".join(chunk)
+                    url = f"{SUPABASE_URL}/rest/v1/traffic_cache?domain=in.({in_clause})&select=*"
+                    r = httpx.get(url, headers=self.sb_headers, timeout=5.0)
+                    if r.status_code == 200 and r.json():
+                        for sb_row in r.json():
+                            dom = sb_row.get("domain")
+                            if dom and sb_row.get("status") == "ok" and (now - sb_row.get("fetched_at", 0)) <= self.ttl:
+                                data = {f: sb_row.get(f) for f in _FIELDS}
+                                if data.get("monthly_visits_raw") and data.get("monthly_visits_raw") not in ("N/A", "TRAFFIC"):
+                                    row_vals = []
+                                    for f in _FIELDS:
+                                        v = data.get(f)
+                                        if f in ("top_regions", "top_keywords") and isinstance(v, (list, dict)):
+                                            v = json.dumps(v, ensure_ascii=False)
+                                        row_vals.append(v)
+                                    p_holders = ", ".join("?" for _ in _FIELDS)
+                                    self.conn.execute(
+                                        f"INSERT OR REPLACE INTO traffic (domain, {cols}, status, fetched_at) "
+                                        f"VALUES (?, {p_holders}, ?, ?)",
+                                        (dom, *row_vals, "ok", sb_row.get("fetched_at")),
+                                    )
+                                    out[dom] = TrafficResult(dom, status="ok", cache_hit=True, **data)
+                        self.conn.commit()
+            except Exception:
+                pass
+
+        return out
+
     def get(self, domain: str) -> Optional[TrafficResult]:
         """Kết quả 'ok' còn hạn cho domain, hoặc None. Không cache lỗi/blocked."""
         cols = ", ".join(_FIELDS)

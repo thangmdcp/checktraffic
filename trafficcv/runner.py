@@ -132,10 +132,11 @@ def run_batch(
             session = None
 
     try:
-        # 1) Lấy trước từ cache.
+        # 1) Lấy trước từ cache (sử dụng bulk query siêu tốc).
         to_fetch: list[str] = []
+        cached_map = cache.get_many(domains) if settings.use_cache else {}
         for d in domains:
-            cached = cache.get(d) if settings.use_cache else None
+            cached = cached_map.get(d)
             if cached is not None:
                 outcome.from_cache += 1
                 emit(cached)
