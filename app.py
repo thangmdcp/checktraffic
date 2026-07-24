@@ -410,8 +410,70 @@ keep_unknown = saved_conf.get("keep_unknown", False)
 drop_no_site = saved_conf.get("drop_no_site", False)
 
 
-# =========================== Input Section (Rộng Hơn, Khung Đẹp, Typewriter Run-Once) ===========================
-st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+# =========================== Project Management & Auto-Load ===========================
+cache_mgr = Cache()
+saved_projects = cache_mgr.get_projects()
+project_names = [p["name"] for p in saved_projects]
+all_proj_options = ["📊 Tất cả dữ liệu trong Supabase"] + project_names
+
+# Auto-load initial results from Supabase if session_state["results"] is empty
+if "results" not in st.session_state or st.session_state["results"] is None:
+    all_doms = cache_mgr.get_all_saved_domains()
+    if all_doms:
+        initial_map = cache_mgr.get_many(all_doms)
+        st.session_state["results"] = list(initial_map.values())
+cache_mgr.close()
+
+st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+with st.container(border=True):
+    col_p1, col_p2, col_p3 = st.columns([2.5, 1.8, 1.8], vertical_alignment="center")
+    with col_p1:
+        sel_project = st.selectbox("📁 Chọn bảng dữ liệu đã lưu", all_proj_options, key="project_select")
+    with col_p2:
+        proj_time_str = "Tự động đồng bộ"
+        if sel_project != "📊 Tất cả dữ liệu trong Supabase":
+            p_match = next((p for p in saved_projects if p["name"] == sel_project), None)
+            if p_match and p_match.get("updated_at"):
+                import datetime
+                dt = datetime.datetime.fromtimestamp(p_match["updated_at"])
+                proj_time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        st.markdown(f"📅 **Cập nhật gần nhất:**  \n`<span style='color:{PRIMARY}; font-weight:600'>{proj_time_str}</span>`", unsafe_allow_html=True)
+    with col_p3:
+        btn_refresh_project = st.button("🔄 Cập nhật dữ liệu mới nhất", use_container_width=True, help="Quét lại mới 100% từ live web cho tất cả website trong bảng này và ghi đè vào Supabase")
+
+if btn_refresh_project:
+    c_mgr = Cache()
+    if sel_project == "📊 Tất cả dữ liệu trong Supabase":
+        target_domains = c_mgr.get_all_saved_domains()
+    else:
+        target_domains = c_mgr.get_project_domains(sel_project)
+    c_mgr.close()
+    if target_domains:
+        settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=False, headless=True, proxies=proxies_list if use_proxy else None, concurrency=concurrency)
+        st.toast(f"Đang quét lại {len(target_domains)} website...", icon="🔄")
+        outcome = _run_and_stream(target_domains, settings, serper_keys=serper_keys)
+        st.session_state["results"] = outcome.results
+        c_mgr = Cache()
+        if sel_project != "📊 Tất cả dữ liệu trong Supabase":
+            c_mgr.save_project(sel_project, target_domains)
+        c_mgr.close()
+        st.rerun()
+
+elif sel_project != st.session_state.get("last_sel_project"):
+    st.session_state["last_sel_project"] = sel_project
+    c_mgr = Cache()
+    if sel_project == "📊 Tất cả dữ liệu trong Supabase":
+        target_domains = c_mgr.get_all_saved_domains()
+    else:
+        target_domains = c_mgr.get_project_domains(sel_project)
+    if target_domains:
+        res_map = c_mgr.get_many(target_domains)
+        st.session_state["results"] = list(res_map.values())
+    c_mgr.close()
+
+
+# =========================== Input Section ===========================
+st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 with st.container(border=True):
     st.markdown(
         f"""
@@ -439,9 +501,29 @@ with st.container(border=True):
     n_brand = len(preview) - n_domain
 
     st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-    col_a, col_b = st.columns([1.2, 2.8], vertical_alignment="center")
-    with col_a:
+    col_a1, col_a2, col_b = st.columns([1.3, 1.3, 2.4], vertical_alignment="center")
+    with col_a1:
         start = st.button(":material/play_circle: Bắt đầu check", type="primary", use_container_width=True)
+    with col_a2:
+        with st.popover("💾 Lưu danh sách này", use_container_width=True):
+            st.markdown("### 💾 Lưu danh sách vào Supabase")
+            save_name_input = st.text_input("Tên danh sách / dự án", placeholder="Ví dụ: Brand Đối Thủ Q3", key="save_project_name")
+            btn_save = st.button("Lưu ngay vào Supabase", type="primary", use_container_width=True)
+            if btn_save and save_name_input.strip():
+                current_res = st.session_state.get("results") or []
+                doms_to_save = [r.domain for r in current_res if r.domain]
+                if not doms_to_save and preview:
+                    doms_to_save = preview
+                if doms_to_save:
+                    c_mgr = Cache()
+                    ts_saved = c_mgr.save_project(save_name_input.strip(), doms_to_save)
+                    c_mgr.close()
+                    st.toast(f"Đã lưu danh sách '{save_name_input.strip()}' vào Supabase!", icon="💾")
+                    st.session_state["last_sel_project"] = save_name_input.strip()
+                    st.rerun()
+                else:
+                    st.warning("Chưa có tên miền nào để lưu.")
+
     with col_b:
         if preview:
             chips = [f'<span class="chip accent"><b>{len(preview)}</b> mục tổng</span>']

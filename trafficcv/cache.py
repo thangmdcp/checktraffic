@@ -52,10 +52,18 @@ class Cache:
         )
         self.conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS brand_site (
-                brand TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS projects (
+                name TEXT PRIMARY KEY,
+                updated_at REAL
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS project_domains (
+                project_name TEXT,
                 domain TEXT,
-                fetched_at REAL
+                PRIMARY KEY (project_name, domain)
             )
             """
         )
@@ -306,6 +314,102 @@ class Cache:
                 httpx.post(url, headers=self.sb_headers, json=payload, timeout=3.0)
             except Exception:
                 pass
+
+    def save_project(self, name: str, domains: list[str]) -> float:
+        """Lưu danh sách dự án với danh sách tên miền và trả về thời gian cập nhật."""
+        name_clean = name.strip()
+        if not name_clean:
+            return time.time()
+        ts = time.time()
+        self.conn.execute("INSERT OR REPLACE INTO projects (name, updated_at) VALUES (?, ?)", (name_clean, ts))
+        for d in domains:
+            if d:
+                self.conn.execute("INSERT OR REPLACE INTO project_domains (project_name, domain) VALUES (?, ?)", (name_clean, d.lower()))
+        self.conn.commit()
+
+        if self.sb_headers:
+            try:
+                url_p = f"{SUPABASE_URL}/rest/v1/projects"
+                httpx.post(url_p, headers=self.sb_headers, json={"name": name_clean, "updated_at": ts}, timeout=3.0)
+                url_pd = f"{SUPABASE_URL}/rest/v1/project_domains"
+                pd_payload = [{"project_name": name_clean, "domain": d.lower()} for d in domains if d]
+                if pd_payload:
+                    httpx.post(url_pd, headers=self.sb_headers, json=pd_payload, timeout=3.0)
+            except Exception:
+                pass
+        return ts
+
+    def get_projects(self) -> list[dict]:
+        """Lấy danh sách tất cả các dự án đã lưu kèm thời gian cập nhật."""
+        out = []
+        try:
+            rows = self.conn.execute("SELECT name, updated_at FROM projects ORDER BY updated_at DESC").fetchall()
+            for r in rows:
+                out.append({"name": r[0], "updated_at": r[1]})
+        except Exception:
+            pass
+
+        if self.sb_headers:
+            try:
+                url = f"{SUPABASE_URL}/rest/v1/projects?select=name,updated_at&order=updated_at.desc"
+                r = httpx.get(url, headers=self.sb_headers, timeout=3.0)
+                if r.status_code == 200 and r.json():
+                    sb_projects = r.json()
+                    existing_names = {x["name"] for x in out}
+                    for item in sb_projects:
+                        if item.get("name") not in existing_names:
+                            out.append({"name": item.get("name"), "updated_at": item.get("updated_at", 0)})
+            except Exception:
+                pass
+
+        return out
+
+    def get_project_domains(self, name: str) -> list[str]:
+        """Lấy toàn bộ domain thuộc về một dự án."""
+        name_clean = name.strip()
+        doms = []
+        try:
+            rows = self.conn.execute("SELECT domain FROM project_domains WHERE project_name = ?", (name_clean,)).fetchall()
+            doms = [r[0] for r in rows if r[0]]
+        except Exception:
+            pass
+
+        if self.sb_headers:
+            try:
+                url = f"{SUPABASE_URL}/rest/v1/project_domains?project_name=eq.{name_clean}&select=domain"
+                r = httpx.get(url, headers=self.sb_headers, timeout=3.0)
+                if r.status_code == 200 and r.json():
+                    sb_doms = [x.get("domain") for x in r.json() if x.get("domain")]
+                    for d in sb_doms:
+                        if d not in doms:
+                            doms.append(d)
+            except Exception:
+                pass
+
+        return doms
+
+    def get_all_saved_domains(self) -> list[str]:
+        """Lấy toàn bộ danh sách các domain có sẵn trong Supabase/Cache."""
+        doms = []
+        try:
+            rows = self.conn.execute("SELECT domain FROM traffic WHERE status = 'ok' ORDER BY fetched_at DESC").fetchall()
+            doms = [r[0] for r in rows if r[0]]
+        except Exception:
+            pass
+
+        if self.sb_headers:
+            try:
+                url = f"{SUPABASE_URL}/rest/v1/traffic_cache?select=domain&status=eq.ok&order=fetched_at.desc&limit=1000"
+                r = httpx.get(url, headers=self.sb_headers, timeout=3.0)
+                if r.status_code == 200 and r.json():
+                    sb_doms = [x.get("domain") for x in r.json() if x.get("domain")]
+                    for d in sb_doms:
+                        if d not in doms:
+                            doms.append(d)
+            except Exception:
+                pass
+
+        return doms
 
     def close(self) -> None:
         try:
