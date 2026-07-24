@@ -906,7 +906,13 @@ if st.session_state.get("results"):
         del_doms = [r.domain for r in filtered_results if r.domain]
         if del_doms:
             c_m = Cache()
-            n_del = c_m.delete_domains(del_doms)
+            delete_fn = getattr(c_m, "delete_domains", None)
+            if delete_fn is None:
+                import importlib, trafficcv.cache
+                importlib.reload(trafficcv.cache)
+                c_m = trafficcv.cache.Cache()
+                delete_fn = getattr(c_m, "delete_domains")
+            n_del = delete_fn(del_doms)
             c_m.close()
             del_set = {d.lower().strip() for d in del_doms}
             st.session_state["results"] = [r for r in st.session_state["results"] if r.domain and r.domain.lower().strip() not in del_set]
