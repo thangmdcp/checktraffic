@@ -43,6 +43,7 @@ class CheckRequest(BaseModel):
         json_schema_extra={"example": ["google.com", "vnexpress.net", "Nike"]}
     )
     use_cache: bool = Field(default=True, description="Sử dụng dữ liệu cache gần đây nếu có")
+    force_refresh: bool = Field(default=False, description="Nếu True, bắt buộc quét mới 100% và ghi đè dữ liệu cũ trong Supabase")
     speed: str = Field(default="Vừa", description="Tốc độ quét: 'An toàn', 'Vừa', 'Nhanh'")
     serper_api_keys: Optional[List[str]] = Field(default=None, description="Danh sách Serper API key tùy chọn cho tên brand")
     concurrency: int = Field(default=3, description="Số luồng chạy song song (1-5)")
@@ -126,7 +127,7 @@ def check_traffic(req: CheckRequest):
     settings = RunSettings(
         min_delay=min_delay,
         max_delay=max_delay,
-        use_cache=req.use_cache,
+        use_cache=False if req.force_refresh else req.use_cache,
         headless=True,
         proxies=server_proxies,
         concurrency=max(1, min(5, req.concurrency)),

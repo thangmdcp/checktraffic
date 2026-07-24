@@ -80,6 +80,11 @@ with st.sidebar:
 
     use_cache_val = saved_conf.get("use_cache", True)
     use_cache = st.toggle("Dùng cache dữ liệu", value=use_cache_val)
+    force_refresh_val = saved_conf.get("force_refresh", False)
+    force_refresh = st.toggle("⚡ Ép quét mới & Ghi đè (Force Refresh)", value=force_refresh_val, help="Khi bật: Bỏ qua cache, bắt buộc quét mới số liệu mới nhất hiện tại và tự động ghi đè số liệu mới lên Supabase.")
+    if force_refresh:
+        use_cache = False
+
     ttl_days_val = int(saved_conf.get("ttl_days", 90))
     ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, ttl_days_val, disabled=not use_cache)
     use_parallel_val = saved_conf.get("use_parallel", True)
@@ -149,6 +154,7 @@ with st.sidebar:
         "theme": theme_name,
         "speed": speed,
         "use_cache": use_cache,
+        "force_refresh": force_refresh,
         "ttl_days": int(ttl_days),
         "use_parallel": use_parallel,
         "concurrency": int(concurrency),
