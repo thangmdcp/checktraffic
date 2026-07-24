@@ -344,6 +344,8 @@ with c_head2:
             p_use_parallel = st.toggle("Quét song song", value=saved_conf.get("use_parallel", True), key="parallel_toggle")
             p_concurrency = st.slider("Số luồng Chromium", 1, 5, int(saved_conf.get("concurrency", 3)), disabled=not p_use_parallel, key="concurrency_input") if p_use_parallel else 1
 
+            p_cf_cookie = st.text_input("Cloudflare Cookie (cf_clearance)", value=saved_conf.get("cf_cookie", ""), key="cf_cookie_input", help="Dán mã cf_clearance từ Chrome để bóc Top Quốc gia & Từ khóa", placeholder="Dán mã cf_clearance vào đây...")
+
             p_proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=saved_conf.get("proxy_input", ""), height=65, key="proxy_input", placeholder="http://host:port")
 
         with tab2:
@@ -679,6 +681,7 @@ if start:
         settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=use_cache,
                                ttl=ttl_seconds, headless=True,
                                proxies=proxies_list if use_proxy else None,
+                               cf_cookie=p_cf_cookie if p_cf_cookie else None,
                                concurrency=concurrency)
         try:
             outcome = _run_and_stream(preview, settings, serper_keys=serper_keys)

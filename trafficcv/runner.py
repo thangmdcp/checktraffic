@@ -64,6 +64,7 @@ class RunSettings:
     ttl: int = 90 * 24 * 3600
     headless: bool = True
     proxies: Optional[list[str]] = None   # None/[] = không dùng proxy
+    cf_cookie: Optional[str] = None       # Mã cf_clearance từ Cloudflare (tùy chọn)
     restart_every: int = 40               # khởi động lại trình duyệt sau mỗi N lô
     backoff_after: int = 2                # số lô-bị-chặn liên tiếp trước khi nghỉ dài
     cooldown: float = 90.0                # thời gian nghỉ dài khi nghi bị chặn (giây)
@@ -136,8 +137,13 @@ def run_batch(
         for d in domains:
             cached = cache.get(d) if settings.use_cache else None
             if cached is not None:
-                outcome.from_cache += 1
-                emit(cached)
+                # Nếu quét số lượng ít (<= 5 domain) nhưng bản ghi cache chưa có Top Regions/Keywords:
+                # Cần đưa vào to_fetch để cào bổ sung Top Regions & Keywords!
+                if len(domains) <= 5 and (not cached.top_regions or not cached.top_keywords):
+                    to_fetch.append(d)
+                else:
+                    outcome.from_cache += 1
+                    emit(cached)
             else:
                 to_fetch.append(d)
 
@@ -168,7 +174,7 @@ def run_batch(
                     return
                 t_cache = Cache(ttl=settings.ttl)
                 proxy = proxies[chunk_idx % len(proxies)] if proxies else None
-                t_session = BrowserSession(headless=settings.headless, proxy=proxy)
+                t_session = BrowserSession(headless=settings.headless, proxy=proxy, cf_cookie=settings.cf_cookie)
                 try:
                     with t_session:
                         results_map = get_traffic_bulk(t_session, chunk)
@@ -225,7 +231,7 @@ def run_batch(
                 )
                 if need_new:
                     close_session()
-                    session = BrowserSession(headless=settings.headless, proxy=proxy)
+                    session = BrowserSession(headless=settings.headless, proxy=proxy, cf_cookie=settings.cf_cookie)
                     session.__enter__()
                     current_proxy = proxy
 

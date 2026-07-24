@@ -62,8 +62,7 @@ class BrowserSession:
         headless: Optional[bool] = None,
         proxy: Optional[str] = None,
         user_agent: str = DEFAULT_UA,
-        nav_timeout: float = 20.0,
-        render_wait_ms: int = 2000,
+        cf_cookie: Optional[str] = None,
     ):
         if headless is None:
             headless = os.getenv("TRAFFICCV_HEADLESS", "1") != "0"
@@ -72,6 +71,7 @@ class BrowserSession:
         self.user_agent = user_agent
         self.nav_timeout = nav_timeout * 1000
         self.render_wait_ms = render_wait_ms
+        self.cf_cookie = (cf_cookie or os.getenv("TRAFFICCV_CF_COOKIE") or "").strip()
 
         self._stealth_cm = None
         self._pw = None
@@ -95,6 +95,16 @@ class BrowserSession:
             viewport={"width": 1366, "height": 900},
             timezone_id="Asia/Ho_Chi_Minh",
         )
+        if self.cf_cookie:
+            try:
+                self._context.add_cookies([{
+                    "name": "cf_clearance",
+                    "value": self.cf_cookie,
+                    "domain": ".traffic.cv",
+                    "path": "/",
+                }])
+            except Exception:
+                pass
         self._context.set_default_navigation_timeout(self.nav_timeout)
         self.page = self._context.new_page()
         return self
