@@ -824,6 +824,11 @@ if st.session_state.get("results"):
             st.session_state["row_flt_keep"] = flt_keep_unk
             flt_drop_no_site = st.toggle("Bỏ brand không thấy web", value=st.session_state.get("row_flt_drop", False), disabled=not flt_on, key="row_flt_drop_toggle")
             st.session_state["row_flt_drop"] = flt_drop_no_site
+            
+            st.markdown("---")
+            btn_del_flt_pop = st.button("🗑️ Xóa các web đang lọc khỏi Supabase", type="secondary", use_container_width=True, help="Xóa vĩnh viễn toàn bộ website đang khớp với bộ lọc khỏi Supabase")
+            if btn_del_flt_pop:
+                st.session_state["do_delete_filtered"] = True
 
     with ch5:
         search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Gõ tên website hoặc brand để tìm nhanh...", key="table_search_input", label_visibility="collapsed")
@@ -886,7 +891,27 @@ if st.session_state.get("results"):
             or q in (r.monthly_visits_raw or "").lower()
             or q in (r.status or "").lower()
         ]
-        st.caption(f"🔍 Tìm thấy **{len(filtered_results)}** / {len(results)} website trùng khớp với từ khóa **'{search_kw.strip()}'**.")
+        
+    is_filtered = len(filtered_results) < len(results) or search_kw.strip() or st.session_state.get("row_flt_on")
+    if is_filtered:
+        cap_col1, cap_col2 = st.columns([3.5, 1.2], vertical_alignment="center")
+        with cap_col1:
+            st.caption(f"🔍 Đang lọc hiển thị **{len(filtered_results)}** / {len(results)} website.")
+        with cap_col2:
+            if st.button(f"🗑️ Xóa {len(filtered_results)} web khỏi Supabase", key="btn_del_filtered_cap", use_container_width=True):
+                st.session_state["do_delete_filtered"] = True
+
+    if st.session_state.get("do_delete_filtered"):
+        st.session_state["do_delete_filtered"] = False
+        del_doms = [r.domain for r in filtered_results if r.domain]
+        if del_doms:
+            c_m = Cache()
+            n_del = c_m.delete_domains(del_doms)
+            c_m.close()
+            del_set = {d.lower().strip() for d in del_doms}
+            st.session_state["results"] = [r for r in st.session_state["results"] if r.domain and r.domain.lower().strip() not in del_set]
+            st.toast(f"Đã xóa vĩnh viễn {n_del} website khỏi Supabase!", icon="🗑️")
+            st.rerun()
 
     _render_grid(results_to_dataframe(filtered_results).head(MAX_TABLE_ROWS), key=f"grid_{theme_name}_{hash(search_kw)}")
     if len(filtered_results) > MAX_TABLE_ROWS:

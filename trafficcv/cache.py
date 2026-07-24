@@ -446,6 +446,34 @@ class Cache:
             except Exception:
                 pass
 
+    def delete_domains(self, domains: list[str]) -> int:
+        """Xóa danh sách domains khỏi SQLite và Supabase Cloud."""
+        clean_doms = list({d.lower().strip() for d in domains if d and d.strip()})
+        if not clean_doms:
+            return 0
+        
+        from .scraper import chunked
+        # 1. Xóa trong SQLite local
+        placeholders = ", ".join("?" for _ in clean_doms)
+        try:
+            self.conn.execute(f"DELETE FROM traffic WHERE domain IN ({placeholders})", tuple(clean_doms))
+            self.conn.execute(f"DELETE FROM project_domains WHERE domain IN ({placeholders})", tuple(clean_doms))
+            self.conn.commit()
+        except Exception:
+            pass
+
+        # 2. Xóa trong Supabase Cloud (theo lô 50 domain/lần)
+        if self.sb_headers:
+            try:
+                for chunk in chunked(clean_doms, 50):
+                    in_clause = ",".join(chunk)
+                    httpx.delete(f"{SUPABASE_URL}/rest/v1/traffic_cache?domain=in.({in_clause})", headers=self.sb_headers, timeout=5.0)
+                    httpx.delete(f"{SUPABASE_URL}/rest/v1/project_domains?domain=in.({in_clause})", headers=self.sb_headers, timeout=5.0)
+            except Exception:
+                pass
+
+        return len(clean_doms)
+
     def close(self) -> None:
         try:
             self.conn.close()
