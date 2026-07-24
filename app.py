@@ -528,7 +528,8 @@ def _render_grid(df: pd.DataFrame, key: str = "grid"):
         if pinned: kw["pinned"] = pinned
         gb.configure_column(field, **kw)
 
-    col("Brand", "Brand", flex=1, pinned="left")
+    if "Tên Brand" in df.columns:
+        col("Tên Brand", "Tên Brand", flex=1, pinned="left")
     col("Website", "Website", flex=1.2)
     col("Lượt truy cập/tháng", "Lượt truy cập/tháng", width=140)
     col("Xu hướng", "Xu hướng", width=110,
