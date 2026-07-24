@@ -753,6 +753,35 @@ if st.session_state.get("results"):
     if len(results) > MAX_TABLE_ROWS:
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(results)} dòng — tải file để xem đầy đủ.")
 
+    # Hiển thị Top Quốc Gia & Top Từ Khóa chi tiết (nếu có dữ liệu)
+    has_details = any(r.top_regions or r.top_keywords for r in results)
+    if has_details:
+        st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
+        with st.expander("🌍 Chi tiết Top Quốc Gia & 🔑 Top Từ Khóa", expanded=True):
+            for r in results:
+                if r.top_regions or r.top_keywords:
+                    st.markdown(f"#### 🌐 Website: `{r.domain}`")
+                    col_reg, col_kw = st.columns(2)
+                    with col_reg:
+                        st.markdown("**🌍 Top 5 Quốc Gia Traffic:**")
+                        if r.top_regions:
+                            for item in r.top_regions:
+                                st.markdown(f"- **{item.get('country', '')}**: `{item.get('share', '')}`")
+                        else:
+                            st.caption("Chưa có số liệu quốc gia.")
+                    with col_kw:
+                        st.markdown("**🔑 Top 5 Từ Khóa Mang Lại Traffic:**")
+                        if r.top_keywords:
+                            for item in r.top_keywords:
+                                kw = item.get('keyword', '')
+                                trf = item.get('traffic', '')
+                                vol = item.get('volume', '')
+                                extra = f" - {trf}" if trf else (f" - Vol: {vol}" if vol else "")
+                                st.markdown(f"- **{kw}**{extra}")
+                        else:
+                            st.caption("Chưa có số liệu từ khóa.")
+                    st.markdown("---")
+
     st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
     dl1, dl2 = st.columns(2)
     dl1.download_button(":material/download: Tải Excel (.xlsx)", data=results_to_xlsx_bytes(results),
