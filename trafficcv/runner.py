@@ -233,6 +233,20 @@ def run_batch(
                 batch_results = [results_map.get(
                     d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
 
+                # Nếu số lượng ít (<= 5 domain), tự động gọi thêm trang chi tiết để bóc Top Regions & Top Keywords!
+                if len(to_fetch) <= 5:
+                    for res in batch_results:
+                        if res.status == "ok" and res.domain:
+                            try:
+                                detail_txt = session.fetch_domain_details(res.domain)
+                                regs, kws = parse_domain_details(detail_txt)
+                                if regs:
+                                    res.top_regions = regs
+                                if kws:
+                                    res.top_keywords = kws
+                            except Exception:
+                                pass
+
                 # Emit và lưu cache ngay lập tức để UI không bị chờ
                 for res in batch_results:
                     cache.put(res)
