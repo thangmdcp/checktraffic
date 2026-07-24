@@ -294,6 +294,9 @@ def extract_visits_and_change(seg: list[str]) -> tuple[Optional[str], Optional[s
             if j + 1 < len(seg):
                 raw1 = seg[j + 1].strip()
                 visits_str, change = split_visits_raw(raw1)
+                # Nếu visits_str là chữ rác (như "TRAFFIC", "N/A", "-") -> coi như không có số liệu
+                if visits_str and not _NUM_RE.search(visits_str):
+                    visits_str = "< 1K"
                 if not change and j + 2 < len(seg):
                     raw2 = seg[j + 2].strip()
                     if re.match(r"^[+-]?\s*[0-9.,]+%$", raw2):
@@ -335,14 +338,21 @@ def parse_bulk(body_text: str, requested: list[str]) -> dict[str, TrafficResult]
         seg = lines[start:end]
 
         visits_str, change = extract_visits_and_change(seg)
-        if visits_str is None:
-            out[dom] = TrafficResult(dom, status="not_found", error="Không thấy Total Visits")
+        num_val = parse_number(visits_str) if visits_str else None
+
+        if visits_str is None or visits_str == "< 1K" or num_val is None:
+            out[dom] = TrafficResult(
+                domain=dom,
+                monthly_visits=None,
+                monthly_visits_raw="< 1K",
+                status="not_found",
+                error="Traffic quá thấp (< 1K/tháng) hoặc chưa được thống kê"
+            )
             continue
 
-        raw_num = f"{visits_str}{change or ''}"
         out[dom] = TrafficResult(
             domain=dom,
-            monthly_visits=parse_number(visits_str),
+            monthly_visits=num_val,
             monthly_visits_raw=visits_str,
             change=change,
             trend=trend_label(change),

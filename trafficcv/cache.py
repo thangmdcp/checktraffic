@@ -132,7 +132,7 @@ class Cache:
                 self.conn.execute(f"ALTER TABLE traffic ADD COLUMN {col} {coltype}")
         # Xóa tự động tất cả các bản ghi cache cũ bị lỗi hoặc rỗng số liệu
         try:
-            self.conn.execute("DELETE FROM traffic WHERE status != 'ok' OR monthly_visits_raw IS NULL OR monthly_visits_raw = 'N/A'")
+            self.conn.execute("DELETE FROM traffic WHERE status != 'ok' OR monthly_visits_raw IS NULL OR monthly_visits_raw = 'N/A' OR monthly_visits_raw = 'TRAFFIC'")
             self.conn.commit()
         except Exception:
             pass
