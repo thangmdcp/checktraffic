@@ -1,4 +1,4 @@
-"""Web app check traffic hàng loạt — UI/UX Pro Max Glassmorphism & Illustrated Background (Icon-only Popover, Typewriter Title, Seamless Blending)."""
+"""Web app check traffic hàng loạt — UI/UX Pro Max Glassmorphism (One-time Typewriter Title, Icon Popover Fix, Wider Input Frame)."""
 
 from __future__ import annotations
 
@@ -66,8 +66,8 @@ MAX_TABLE_ROWS = 1000
 
 THEMES = {
     "Sáng": dict(
-        bg="#F8FAFC", panel="rgba(255, 255, 255, 0.85)", border="rgba(226, 232, 240, 0.8)", text="#0F172A",
-        muted="#475569", grid="rgba(241, 245, 249, 0.6)", inputbg="rgba(255, 255, 255, 0.9)",
+        bg="#F8FAFC", panel="rgba(255, 255, 255, 0.88)", border="rgba(226, 232, 240, 0.9)", text="#0F172A",
+        muted="#475569", grid="rgba(241, 245, 249, 0.6)", inputbg="rgba(255, 255, 255, 0.95)",
         sidebar="#FFFFFF", hover="rgba(241, 245, 249, 0.7)", headbg="rgba(248, 250, 252, 0.8)",
         tablebg="rgba(255, 255, 255, 0.95)", tableodd="rgba(248, 250, 252, 0.7)", tablehover="#EEF2FF", tableborder="#E2E8F0",
         dlbg="#EEF2FF",
@@ -75,9 +75,9 @@ THEMES = {
         herobadgebgb="rgba(30, 64, 175, 0.06)", herobadgebord="rgba(30, 64, 175, 0.20)", herobadgetxt="#1E40AF"
     ),
     "Tối": dict(
-        bg="#0B0F17", panel="rgba(15, 23, 42, 0.78)", border="rgba(255, 255, 255, 0.12)",
+        bg="#0B0F17", panel="rgba(15, 23, 42, 0.80)", border="rgba(255, 255, 255, 0.12)",
         text="#F8FAFC", muted="#94A3B8", grid="rgba(255, 255, 255, 0.05)",
-        inputbg="rgba(15, 23, 42, 0.7)", sidebar="#070A10",
+        inputbg="rgba(15, 23, 42, 0.75)", sidebar="#070A10",
         hover="rgba(255, 255, 255, 0.04)", headbg="rgba(17, 24, 39, 0.8)",
         tablebg="rgba(15, 23, 42, 0.9)", tableodd="rgba(17, 24, 39, 0.8)", tablehover="#1E293B", tableborder="rgba(255,255,255,0.08)",
         dlbg="rgba(99, 102, 241, 0.12)",
@@ -131,7 +131,7 @@ st.markdown(
         color:{T['text']} !important; font-weight:600; letter-spacing: -0.2px; 
     }}
     
-    /* Inputs & Textarea */
+    /* Inputs & Textarea Rộng & Đẹp */
     .stTextArea textarea, .stTextInput input, .stNumberInput input,
     [data-baseweb="textarea"], [data-baseweb="input"], [data-baseweb="base-input"],
     [data-baseweb="select"]>div {{ 
@@ -147,7 +147,7 @@ st.markdown(
         font-family:'Fira Code', monospace; 
         font-size:13.5px; 
         line-height: 1.6;
-        padding: 14px 16px;
+        padding: 16px 18px;
     }}
     [data-baseweb="textarea"]:focus-within, [data-baseweb="input"]:focus-within {{ 
         border-color:{PRIMARY} !important; 
@@ -177,10 +177,10 @@ st.markdown(
     /* Container Panels Glassmorphism */
     [data-testid="stVerticalBlockBorderWrapper"] {{ 
         background:{T['panel']} !important; 
-        border:1.5px solid {T['border']} !important;
+        border:1.5px solid rgba(79, 70, 229, 0.2) !important;
         border-radius:20px !important; 
         backdrop-filter: blur(24px) !important;
-        box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.06) !important;
+        box-shadow: 0 14px 45px -10px rgba(30, 64, 175, 0.08) !important;
     }}
     .panel-title {{ 
         display:inline-flex; align-items:center; font-size:12.5px; font-weight:700;
@@ -194,20 +194,20 @@ st.markdown(
         box-shadow:0 8px 20px -6px rgba(30, 64, 175, 0.5); margin:6px 0 14px; 
     }}
 
-    /* Popover Icon-Only Button — KHÔNG KHUNG, KHÔNG MŨI TÊN, CĂN PHẢI */
+    /* Popover Icon-Only Button — Sửa lỗi click & Căn phải lề */
     div[data-testid="stPopover"] {{
+        width: 100% !important;
         display: flex !important;
         justify-content: flex-end !important;
-        width: 100% !important;
     }}
     div[data-testid="stPopover"] > button {{
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        padding: 4px !important;
-        width: 36px !important;
-        height: 36px !important;
-        min-height: 36px !important;
+        padding: 0 !important;
+        width: 40px !important;
+        height: 40px !important;
+        min-height: 40px !important;
         border-radius: 10px !important;
         display: flex !important;
         align-items: center !important;
@@ -218,23 +218,22 @@ st.markdown(
         background: rgba(30, 64, 175, 0.12) !important;
     }}
     div[data-testid="stPopover"] > button svg {{
-        display: none !important; /* Ẩn mũi tên xuống ∨ */
+        display: none !important; /* Ẩn mũi tên ∨ */
     }}
     div[data-testid="stPopover"] > button p {{
-        font-size: 20px !important;
+        font-size: 22px !important;
         line-height: 1 !important;
         margin: 0 !important;
     }}
 
-    /* Popup menu vị trí cố định căn phải */
+    /* Popover menu popup styling */
     div[data-testid="stPopoverBody"] {{
-        right: 0 !important;
-        left: auto !important;
         border-radius: 16px !important;
         border: 1px solid {T['border']} !important;
         background: {T['panel']} !important;
         box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.2) !important;
         backdrop-filter: blur(24px) !important;
+        min-width: 360px !important;
     }}
 
     /* Buttons */
@@ -253,27 +252,31 @@ st.markdown(
         box-shadow:0 14px 28px -8px rgba(30, 64, 175, 0.5) !important; 
     }}
 
-    /* Typewriter Title Animation */
+    /* Typewriter Title Animation — HIỆN 1 LẦN THÔI */
     .typewriter-box {{
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
+    }}
+    .typing-container {{
+        display: inline-block;
+        overflow: hidden;
     }}
     .typing-text {{
         display: inline-block;
         overflow: hidden;
         white-space: nowrap;
-        border-right: 2px solid {PRIMARY};
-        font-size: 13.5px;
+        border-right: 2.5px solid {PRIMARY};
+        font-size: 14px;
         font-weight: 700;
         color: {T['text']};
-        animation: typing 4s steps(45, end) infinite, blink .75s step-end infinite;
+        width: 0;
+        animation: typing 2.5s steps(42, end) 0.5s 1 forwards, blink .75s step-end 4;
     }}
     @keyframes typing {{
-        0% {{ width: 0; }}
-        70% {{ width: 100%; }}
-        100% {{ width: 100%; }}
+        from {{ width: 0; }}
+        to {{ width: 100%; }}
     }}
     @keyframes blink {{
         from, to {{ border-color: transparent; }}
@@ -317,7 +320,7 @@ with c_head1:
     )
 
 with c_head2:
-    with st.popover("⚙️", help="Cài đặt & Tài liệu REST API", use_container_width=False):
+    with st.popover("⚙️", help="Cài đặt & Tài liệu REST API", use_container_width=True):
         st.markdown("### ⚙️ Cài Đặt & REST API")
         
         tab1, tab2, tab3 = st.tabs(["⚙️ Cấu hình", "⚡ Bộ lọc", "🔌 REST API"])
@@ -413,7 +416,7 @@ keep_unknown = saved_conf.get("keep_unknown", False)
 drop_no_site = saved_conf.get("drop_no_site", False)
 
 
-# =========================== Input Section (Typewriter Title & Glass Container) ===========================
+# =========================== Input Section (Rộng Hơn, Khung Đẹp, Typewriter Run-Once) ===========================
 st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 with st.container(border=True):
     st.markdown(
@@ -431,7 +434,7 @@ with st.container(border=True):
     st.text_area(
         "Danh sách website hoặc tên brand",
         key="domains_input",
-        height=140,
+        height=180,
         label_visibility="collapsed",
         placeholder="Mỗi dòng 1 mục. Ví dụ:\ngoogle.com\nNike\nshygems.com",
     )
