@@ -137,13 +137,8 @@ def run_batch(
         for d in domains:
             cached = cache.get(d) if settings.use_cache else None
             if cached is not None:
-                # Nếu quét số lượng ít (<= 5 domain) nhưng bản ghi cache chưa có Top Regions/Keywords:
-                # Cần đưa vào to_fetch để cào bổ sung Top Regions & Keywords!
-                if len(domains) <= 5 and (not cached.top_regions or not cached.top_keywords):
-                    to_fetch.append(d)
-                else:
-                    outcome.from_cache += 1
-                    emit(cached)
+                outcome.from_cache += 1
+                emit(cached)
             else:
                 to_fetch.append(d)
 
@@ -238,20 +233,6 @@ def run_batch(
                 results_map = get_traffic_bulk(session, chunk)
                 batch_results = [results_map.get(
                     d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
-
-                # Nếu số lượng ít (<= 5 domain), tự động gọi thêm trang chi tiết để bóc Top Regions & Top Keywords!
-                if len(to_fetch) <= 5:
-                    for res in batch_results:
-                        if res.status == "ok" and res.domain:
-                            try:
-                                detail_txt = session.fetch_domain_details(res.domain)
-                                regs, kws = parse_domain_details(detail_txt)
-                                if regs:
-                                    res.top_regions = regs
-                                if kws:
-                                    res.top_keywords = kws
-                            except Exception:
-                                pass
 
                 # Emit và lưu cache ngay lập tức để UI không bị chờ
                 for res in batch_results:

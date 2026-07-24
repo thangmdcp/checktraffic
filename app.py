@@ -344,18 +344,6 @@ with c_head2:
             p_use_parallel = st.toggle("Quét song song", value=saved_conf.get("use_parallel", True), key="parallel_toggle")
             p_concurrency = st.slider("Số luồng Chromium", 1, 5, int(saved_conf.get("concurrency", 3)), disabled=not p_use_parallel, key="concurrency_input") if p_use_parallel else 1
 
-            p_cf_cookie = st.text_input("Cloudflare Cookie (cf_clearance)", value=saved_conf.get("cf_cookie", ""), key="cf_cookie_input", help="Dán mã cf_clearance từ Chrome để bóc Top Quốc gia & Từ khóa", placeholder="Dán mã cf_clearance vào đây...")
-            with st.expander("❓ Hướng dẫn 10 giây lấy Cookie"):
-                st.markdown(
-                    """
-                    1. **Mở Chrome**: Truy cập [traffic.cv](https://traffic.cv) trên máy Mac.
-                    2. **Bấm F12**: (hoặc Chuột phải -> *Kiểm tra / Inspect*).
-                    3. **Vào tab Application**: Ở cột bên trái chọn **Cookies** -> `https://traffic.cv`.
-                    4. **Copy Value**: Tìm dòng **`cf_clearance`**, copy toàn bộ mã ở cột *Value*.
-                    5. **Dán vào ô trên**: 1 Cookie dùng chung cho **hàng trăm web** trong 1 tiếng!
-                    """
-                )
-
             p_proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=saved_conf.get("proxy_input", ""), height=65, key="proxy_input", placeholder="http://host:port")
 
         with tab2:
@@ -692,8 +680,6 @@ if start:
                                ttl=ttl_seconds, headless=True,
                                proxies=proxies_list if use_proxy else None,
                                concurrency=concurrency)
-        if p_cf_cookie:
-            setattr(settings, "cf_cookie", p_cf_cookie.strip())
         try:
             outcome = _run_and_stream(preview, settings, serper_keys=serper_keys)
             st.session_state["results"] = outcome.results
@@ -754,34 +740,6 @@ if st.session_state.get("results"):
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(results)} dòng — tải file để xem đầy đủ.")
 
     # Hiển thị Top Quốc Gia & Top Từ Khóa chi tiết (nếu có dữ liệu)
-    has_details = any(r.top_regions or r.top_keywords for r in results)
-    if has_details:
-        st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
-        with st.expander("🌍 Chi tiết Top Quốc Gia & 🔑 Top Từ Khóa", expanded=True):
-            for r in results:
-                if r.top_regions or r.top_keywords:
-                    st.markdown(f"#### 🌐 Website: `{r.domain}`")
-                    col_reg, col_kw = st.columns(2)
-                    with col_reg:
-                        st.markdown("**🌍 Top 5 Quốc Gia Traffic:**")
-                        if r.top_regions:
-                            for item in r.top_regions:
-                                st.markdown(f"- **{item.get('country', '')}**: `{item.get('share', '')}`")
-                        else:
-                            st.caption("Chưa có số liệu quốc gia.")
-                    with col_kw:
-                        st.markdown("**🔑 Top 5 Từ Khóa Mang Lại Traffic:**")
-                        if r.top_keywords:
-                            for item in r.top_keywords:
-                                kw = item.get('keyword', '')
-                                trf = item.get('traffic', '')
-                                vol = item.get('volume', '')
-                                extra = f" - {trf}" if trf else (f" - Vol: {vol}" if vol else "")
-                                st.markdown(f"- **{kw}**{extra}")
-                        else:
-                            st.caption("Chưa có số liệu từ khóa.")
-                    st.markdown("---")
-
     st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
     dl1, dl2 = st.columns(2)
     dl1.download_button(":material/download: Tải Excel (.xlsx)", data=results_to_xlsx_bytes(results),
