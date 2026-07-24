@@ -368,9 +368,9 @@ with c_head2:
         current_conf = {
             "theme": p_theme,
             "speed": p_speed,
-            "use_cache": p_use_cache,
+            "use_cache": use_cache,
             "force_refresh": p_force_refresh,
-            "ttl_days": int(p_ttl_days),
+            "ttl_days": 3650,
             "use_parallel": p_use_parallel,
             "concurrency": int(p_concurrency),
             "proxy_input": p_proxy_text,
@@ -809,11 +809,28 @@ if st.session_state.get("results"):
             else:
                 st.caption("Chưa có dữ liệu xu hướng.")
 
-    st.markdown('<div class="table-title"><span class="mi" style="font-size:17px">table_rows</span>'
-                'Bảng kết quả</div>', unsafe_allow_html=True)
-    _render_grid(results_to_dataframe(results).head(MAX_TABLE_ROWS), key=f"grid_{theme_name}")
-    if len(results) > MAX_TABLE_ROWS:
-        st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(results)} dòng — tải file để xem đầy đủ.")
+    col_t1, col_t2 = st.columns([1.8, 2.2], vertical_alignment="center")
+    with col_t1:
+        st.markdown('<div class="table-title" style="margin:0"><span class="mi" style="font-size:17px">table_rows</span>'
+                    'Bảng kết quả</div>', unsafe_allow_html=True)
+    with col_t2:
+        search_kw = st.text_input("🔍 Tìm kiếm nhanh", placeholder="🔍 Gõ tên website hoặc brand để tìm nhanh...", key="table_search_input", label_visibility="collapsed")
+
+    filtered_results = results
+    if search_kw.strip():
+        q = search_kw.strip().lower()
+        filtered_results = [
+            r for r in results
+            if q in (r.domain or "").lower()
+            or q in (r.brand_name or "").lower()
+            or q in (r.monthly_visits_raw or "").lower()
+            or q in (r.status or "").lower()
+        ]
+        st.caption(f"🔍 Tìm thấy **{len(filtered_results)}** / {len(results)} website trùng khớp với từ khóa **'{search_kw.strip()}'**.")
+
+    _render_grid(results_to_dataframe(filtered_results).head(MAX_TABLE_ROWS), key=f"grid_{theme_name}_{hash(search_kw)}")
+    if len(filtered_results) > MAX_TABLE_ROWS:
+        st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(filtered_results)} dòng — tải file để xem đầy đủ.")
 
     # Hiển thị Top Quốc Gia & Top Từ Khóa chi tiết (nếu có dữ liệu)
     st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
