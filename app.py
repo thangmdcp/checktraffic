@@ -345,6 +345,16 @@ with c_head2:
             p_concurrency = st.slider("Số luồng Chromium", 1, 5, int(saved_conf.get("concurrency", 3)), disabled=not p_use_parallel, key="concurrency_input") if p_use_parallel else 1
 
             p_cf_cookie = st.text_input("Cloudflare Cookie (cf_clearance)", value=saved_conf.get("cf_cookie", ""), key="cf_cookie_input", help="Dán mã cf_clearance từ Chrome để bóc Top Quốc gia & Từ khóa", placeholder="Dán mã cf_clearance vào đây...")
+            with st.expander("❓ Hướng dẫn 10 giây lấy Cookie"):
+                st.markdown(
+                    """
+                    1. **Mở Chrome**: Truy cập [traffic.cv](https://traffic.cv) trên máy Mac.
+                    2. **Bấm F12**: (hoặc Chuột phải -> *Kiểm tra / Inspect*).
+                    3. **Vào tab Application**: Ở cột bên trái chọn **Cookies** -> `https://traffic.cv`.
+                    4. **Copy Value**: Tìm dòng **`cf_clearance`**, copy toàn bộ mã ở cột *Value*.
+                    5. **Dán vào ô trên**: 1 Cookie dùng chung cho **hàng trăm web** trong 1 tiếng!
+                    """
+                )
 
             p_proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=saved_conf.get("proxy_input", ""), height=65, key="proxy_input", placeholder="http://host:port")
 
