@@ -18,6 +18,7 @@ from trafficcv.scraper import (parse_brand_list, looks_like_domain,
                                filter_results, parse_number)
 from trafficcv.runner import RunSettings, run_auto_batch, load_proxies
 from trafficcv.brand import load_serper_keys
+from trafficcv.cache import Cache
 from trafficcv.excel import results_to_dataframe, results_to_xlsx_bytes, results_to_csv_bytes
 
 st.set_page_config(
