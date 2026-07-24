@@ -480,8 +480,7 @@ def _table_html(df: pd.DataFrame) -> str:
 
         rows.append(f"""
         <tr style="background:{bg}; border-bottom:1px solid {T['tableborder']}">
-            <td style="padding:8px 12px; font-weight:600">{r['Brand']}</td>
-            <td style="padding:8px 12px; font-family:'Fira Code',monospace">{r['Website']}</td>
+            <td style="padding:8px 12px; font-family:'Fira Code',monospace; font-weight:700">{r['Website']}</td>
             <td style="padding:8px 12px; font-weight:700; font-family:'Fira Code',monospace">{r['Lượt truy cập/tháng']}</td>
             <td style="padding:8px 12px; {trend(r['Xu hướng'])}">{r['Xu hướng']}</td>
             <td style="padding:8px 12px; {change(r['Thay đổi'])}">{r['Thay đổi']}</td>
@@ -498,7 +497,6 @@ def _table_html(df: pd.DataFrame) -> str:
     <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12.5px">
         <thead>
             <tr style="background:{T['headbg']}; color:{T['text']}; border-bottom:1.5px solid {T['tableborder']}">
-                <th style="padding:10px 12px">Brand</th>
                 <th style="padding:10px 12px">Website</th>
                 <th style="padding:10px 12px">Lượt truy cập</th>
                 <th style="padding:10px 12px">Xu hướng</th>
@@ -528,9 +526,7 @@ def _render_grid(df: pd.DataFrame, key: str = "grid"):
         if pinned: kw["pinned"] = pinned
         gb.configure_column(field, **kw)
 
-    if "Tên Brand" in df.columns:
-        col("Tên Brand", "Tên Brand", flex=1, pinned="left")
-    col("Website", "Website", flex=1.2)
+    col("Website", "Website", flex=1.2, pinned="left")
     col("Lượt truy cập/tháng", "Lượt truy cập/tháng", width=140)
     col("Xu hướng", "Xu hướng", width=110,
         cell_style=JsCode(f"params => params.value === 'Tăng' ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : (params.value === 'Giảm' ? {{'color': '{DANGER}', 'fontWeight': '700'}} : null)"))

@@ -12,7 +12,6 @@ from .scraper import TrafficResult
 # Cột hiển thị (tiếng Việt) ánh xạ từ field của TrafficResult.
 # Cột traffic dùng GIÁ TRỊ GỐC của traffic.cv (vd "92.012K") để giữ nguyên độ chính xác.
 _COLUMNS = [
-    ("brand", "Tên Brand"),
     ("domain", "Website"),
     ("monthly_visits_raw", "Lượt truy cập/tháng"),
     ("trend", "Xu hướng"),
@@ -27,10 +26,7 @@ _COLUMNS = [
 
 def results_to_dataframe(results: Iterable[TrafficResult]) -> pd.DataFrame:
     rows = [r.as_row() for r in results]
-    df = pd.DataFrame(rows, columns=[k for k, _ in _COLUMNS])
-    # Bỏ cột brand nếu toàn rỗng (chế độ domain không cần cột Brand)
-    if "brand" in df.columns and not df["brand"].fillna("").astype(str).str.strip().any():
-        df = df.drop(columns=["brand"])
+    df = pd.DataFrame(rows, columns=[k for k, _ in _COLUMNS if k in (rows[0] if rows else {}) or True])
     return df.rename(columns=dict(_COLUMNS))
 
 
