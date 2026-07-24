@@ -748,25 +748,43 @@ if st.session_state.get("results"):
     c_mgr = Cache()
     saved_projects = c_mgr.get_projects()
     project_names = [p["name"] for p in saved_projects]
-    all_proj_options = project_names + ["🌐 Tất cả web tích lũy"] if project_names else ["🌐 Tất cả web tích lũy"]
+    all_proj_options = ["🌐 Tất cả web đã check"] + project_names
     c_mgr.close()
 
     # --- Unified Compact Header Bar Above Table ---
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-    ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([1.8, 2.0, 1.1, 1.1, 1.8, 1.1, 1.1], vertical_alignment="center")
+    ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([1.5, 2.2, 1.1, 1.1, 2.0, 1.0, 1.0], vertical_alignment="center")
     
     with ch1:
-        st.markdown(f'<div class="table-title" style="margin:0"><span class="mi" style="font-size:17px">table_rows</span> Kết quả</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:15px; font-weight:700; color:{T["text"]}; display:flex; align-items:center; gap:6px;"><span class="mi" style="font-size:17px; color:{PRIMARY}">table_rows</span> Kết quả</div>', unsafe_allow_html=True)
     with ch2:
         sel_project = st.selectbox("Dự án", all_proj_options, key="project_select", label_visibility="collapsed")
     with ch3:
         btn_refresh_project = st.button("🔄 Quét lại", use_container_width=True, help="Quét mới 100% từ live web cho tất cả website trong bảng này")
     with ch4:
-        with st.popover("💾 Lưu", use_container_width=True):
-            st.markdown("##### 💾 Lưu danh sách")
-            save_name_input = st.text_input("Tên danh sách", placeholder="Ví dụ: Brand Q3", key="save_project_name")
-            btn_save = st.button("Lưu ngay", type="primary", use_container_width=True)
-            if btn_save and save_name_input.strip():
+        with st.popover("💾 Quản lý", use_container_width=True):
+            st.markdown("##### 💾 Quản lý dự án / Bảng")
+            default_name_val = "" if sel_project.startswith("🌐") else sel_project
+            save_name_input = st.text_input("Tên dự án", value=default_name_val, placeholder="Ví dụ: Brand Q3", key="proj_name_edit_input")
+            
+            b_col1, b_col2 = st.columns(2)
+            with b_col1:
+                btn_save_new = st.button("💾 Lưu dự án", type="primary", use_container_width=True)
+            with b_col2:
+                btn_rename = st.button("✏️ Đổi tên", use_container_width=True, disabled=sel_project.startswith("🌐"))
+            
+            if not sel_project.startswith("🌐"):
+                st.markdown("---")
+                btn_del_proj = st.button("🗑️ Xóa dự án này", type="secondary", use_container_width=True)
+                if btn_del_proj:
+                    c_m = Cache()
+                    c_m.delete_project(sel_project)
+                    c_m.close()
+                    st.toast(f"Đã xóa dự án '{sel_project}'!", icon="🗑️")
+                    st.session_state["last_sel_project"] = "🌐 Tất cả web đã check"
+                    st.rerun()
+
+            if btn_save_new and save_name_input.strip():
                 current_res = st.session_state.get("results") or []
                 doms_to_save = list({r.domain.lower().strip() for r in current_res if r.domain})
                 if not doms_to_save and preview:
@@ -775,11 +793,17 @@ if st.session_state.get("results"):
                     c_m = Cache()
                     c_m.save_project(save_name_input.strip(), doms_to_save)
                     c_m.close()
-                    st.toast(f"Đã lưu '{save_name_input.strip()}'!", icon="💾")
+                    st.toast(f"Đã lưu dự án '{save_name_input.strip()}'!", icon="💾")
                     st.session_state["last_sel_project"] = save_name_input.strip()
                     st.rerun()
-                else:
-                    st.warning("Chưa có tên miền nào để lưu.")
+            elif btn_rename and save_name_input.strip() and not sel_project.startswith("🌐"):
+                c_m = Cache()
+                c_m.rename_project(sel_project, save_name_input.strip())
+                c_m.close()
+                st.toast(f"Đã đổi tên thành '{save_name_input.strip()}'!", icon="✏️")
+                st.session_state["last_sel_project"] = save_name_input.strip()
+                st.rerun()
+
     with ch5:
         search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Tìm nhanh...", key="table_search_input", label_visibility="collapsed")
     with ch6:

@@ -411,6 +411,41 @@ class Cache:
 
         return doms
 
+    def rename_project(self, old_name: str, new_name: str) -> None:
+        """Đổi tên một dự án đã có."""
+        old_clean = old_name.strip()
+        new_clean = new_name.strip()
+        if not old_clean or not new_clean or old_clean == new_clean:
+            return
+        
+        self.conn.execute("UPDATE projects SET name = ? WHERE name = ?", (new_clean, old_clean))
+        self.conn.execute("UPDATE project_domains SET project_name = ? WHERE project_name = ?", (new_clean, old_clean))
+        self.conn.commit()
+
+        if self.sb_headers:
+            try:
+                httpx.patch(f"{SUPABASE_URL}/rest/v1/projects?name=eq.{old_clean}", headers=self.sb_headers, json={"name": new_clean}, timeout=3.0)
+                httpx.patch(f"{SUPABASE_URL}/rest/v1/project_domains?project_name=eq.{old_clean}", headers=self.sb_headers, json={"project_name": new_clean}, timeout=3.0)
+            except Exception:
+                pass
+
+    def delete_project(self, name: str) -> None:
+        """Xóa một dự án đã lưu."""
+        name_clean = name.strip()
+        if not name_clean:
+            return
+        
+        self.conn.execute("DELETE FROM projects WHERE name = ?", (name_clean,))
+        self.conn.execute("DELETE FROM project_domains WHERE project_name = ?", (name_clean,))
+        self.conn.commit()
+
+        if self.sb_headers:
+            try:
+                httpx.delete(f"{SUPABASE_URL}/rest/v1/projects?name=eq.{name_clean}", headers=self.sb_headers, timeout=3.0)
+                httpx.delete(f"{SUPABASE_URL}/rest/v1/project_domains?project_name=eq.{name_clean}", headers=self.sb_headers, timeout=3.0)
+            except Exception:
+                pass
+
     def close(self) -> None:
         try:
             self.conn.close()
