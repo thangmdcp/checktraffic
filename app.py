@@ -1,10 +1,12 @@
-"""Web app check traffic hàng loạt từ traffic.cv — SaaS dashboard, hỗ trợ theme Sáng/Tối."""
+"""Web app check traffic hàng loạt từ traffic.cv — SaaS dashboard siêu sạch, hiện đại."""
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -20,10 +22,8 @@ from trafficcv.excel import results_to_dataframe, results_to_xlsx_bytes, results
 st.set_page_config(page_title="Check Traffic Hàng Loạt", page_icon="📈", layout="wide")
 
 # ---- Cấu hình lưu trữ cài đặt (settings.json) ----
-import json
-from pathlib import Path
-
 SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
+
 
 def load_saved_settings() -> dict:
     if SETTINGS_FILE.exists():
@@ -33,44 +33,49 @@ def load_saved_settings() -> dict:
             pass
     return {}
 
+
 def save_settings(data: dict):
     try:
         SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
 
+
 saved_conf = load_saved_settings()
 
-
-# ---- Tokens cố định (theo design system 'Dashboard') ----
+# ---- Tokens cố định (Design System 'Minimal Clean SaaS') ----
 PRIMARY, ACCENT = "#4F46E5", "#8B5CF6"
 CYAN = "#06B6D4"
 SUCCESS, DANGER, WARNING = "#10B981", "#EF4444", "#F59E0B"
-MAX_TABLE_ROWS = 1000  # giới hạn dòng hiển thị bảng
+MAX_TABLE_ROWS = 1000
 
 THEMES = {
-    "Sáng": dict(bg="#F8FAFC", panel="#FFFFFF", border="#E2E8F0", text="#0F172A",
-                 muted="#64748B", grid="#F1F5F9", inputbg="#FFFFFF",
-                 sidebar="#FFFFFF", hover="#F1F5F9", headbg="#F1F5F9",
-                 tablebg="#FFFFFF", tableodd="#F8FAFC", tablehover="#EEF2FF", tableborder="#E2E8F0",
-                 dlbg="#EEF2FF",
-                 herobg="linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 50%, #FAF5FF 100%)",
-                 heroborder="#C7D2FE", herotitle="#1E1B4B", herodesc="#475569",
-                 herobadgebgb="rgba(79, 70, 229, 0.08)", herobadgebord="rgba(99, 102, 241, 0.25)", herobadgetxt="#4338CA"),
-    "Tối": dict(bg="#0B0F17", panel="rgba(17, 24, 39, 0.70)", border="rgba(255, 255, 255, 0.08)",
-                text="#F8FAFC", muted="#94A3B8", grid="rgba(255, 255, 255, 0.05)",
-                inputbg="rgba(15, 23, 42, 0.6)", sidebar="#070A10",
-                hover="rgba(255, 255, 255, 0.04)", headbg="#111827",
-                tablebg="#0F172A", tableodd="#111827", tablehover="#1E293B", tableborder="rgba(255,255,255,0.08)",
-                dlbg="rgba(99, 102, 241, 0.12)",
-                herobg="linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 27, 75, 0.90) 50%, rgba(15, 23, 42, 0.98) 100%)",
-                heroborder="rgba(255, 255, 255, 0.12)", herotitle="#FFFFFF", herodesc="#94A3B8",
-                herobadgebgb="rgba(255, 255, 255, 0.08)", herobadgebord="rgba(255, 255, 255, 0.18)", herobadgetxt="#E2E8F0"),
+    "Sáng": dict(
+        bg="#F8FAFC", panel="#FFFFFF", border="#E2E8F0", text="#0F172A",
+        muted="#64748B", grid="#F1F5F9", inputbg="#FFFFFF",
+        sidebar="#FFFFFF", hover="#F1F5F9", headbg="#F8FAFC",
+        tablebg="#FFFFFF", tableodd="#F8FAFC", tablehover="#EEF2FF", tableborder="#E2E8F0",
+        dlbg="#EEF2FF",
+        herobg="#FFFFFF", heroborder="#E2E8F0", herotitle="#0F172A", herodesc="#64748B",
+        herobadgebgb="rgba(79, 70, 229, 0.06)", herobadgebord="rgba(99, 102, 241, 0.20)", herobadgetxt="#4F46E5"
+    ),
+    "Tối": dict(
+        bg="#0B0F17", panel="rgba(17, 24, 39, 0.70)", border="rgba(255, 255, 255, 0.08)",
+        text="#F8FAFC", muted="#94A3B8", grid="rgba(255, 255, 255, 0.05)",
+        inputbg="rgba(15, 23, 42, 0.6)", sidebar="#070A10",
+        hover="rgba(255, 255, 255, 0.04)", headbg="#111827",
+        tablebg="#0F172A", tableodd="#111827", tablehover="#1E293B", tableborder="rgba(255,255,255,0.08)",
+        dlbg="rgba(99, 102, 241, 0.12)",
+        herobg="linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 27, 75, 0.90) 50%, rgba(15, 23, 42, 0.98) 100%)",
+        heroborder="rgba(255, 255, 255, 0.12)", herotitle="#FFFFFF", herodesc="#94A3B8",
+        herobadgebgb="rgba(255, 255, 255, 0.08)", herobadgebord="rgba(255, 255, 255, 0.18)", herobadgetxt="#E2E8F0"
+    ),
 }
 
 # ================================ Sidebar ================================
 with st.sidebar:
-    st.markdown('<div style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #6366F1; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span class="mi" style="font-size: 24px;">tune</span> Cấu Hình SaaS</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 18px; font-weight: 800; color: #4F46E5; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span class="mi">tune</span> Cấu Hình</div>', unsafe_allow_html=True)
+    
     theme_index = 1 if saved_conf.get("theme") == "Tối" else 0
     theme_name = st.radio("Giao diện", ["Sáng", "Tối"], index=theme_index, horizontal=True, key="theme")
 
@@ -80,17 +85,19 @@ with st.sidebar:
 
     use_cache_val = saved_conf.get("use_cache", True)
     use_cache = st.toggle("Dùng cache dữ liệu", value=use_cache_val)
+    
     force_refresh_val = saved_conf.get("force_refresh", False)
-    force_refresh = st.toggle("⚡ Ép quét mới & Ghi đè (Force Refresh)", value=force_refresh_val, help="Khi bật: Bỏ qua cache, bắt buộc quét mới số liệu mới nhất hiện tại và tự động ghi đè số liệu mới lên Supabase.")
+    force_refresh = st.toggle("⚡ Ép quét mới & Ghi đè", value=force_refresh_val, help="Bỏ qua cache, bắt buộc quét mới 100% và ghi đè dữ liệu mới lên Supabase.")
     if force_refresh:
         use_cache = False
 
     ttl_days_val = int(saved_conf.get("ttl_days", 90))
     ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, ttl_days_val, disabled=not use_cache)
+    
     use_parallel_val = saved_conf.get("use_parallel", True)
-    use_parallel = st.toggle("Quét song song (Nhanh)", value=use_parallel_val, help="Mở nhiều trình duyệt Chromium chạy song song để tăng tốc độ lên gấp nhiều lần.")
+    use_parallel = st.toggle("Quét song song", value=use_parallel_val)
     concurrency_val = int(saved_conf.get("concurrency", 3))
-    concurrency = st.slider("Số luồng chạy song song", 1, 5, concurrency_val, disabled=not use_parallel) if use_parallel else 1
+    concurrency = st.slider("Số luồng Chromium", 1, 5, concurrency_val, disabled=not use_parallel) if use_parallel else 1
 
     if st.button("🗑️ Xóa Bộ Nhớ Cache", use_container_width=True):
         try:
@@ -104,52 +111,36 @@ with st.sidebar:
         except Exception:
             pass
 
-    st.markdown('<div style="font-size: 14px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">🌐 Proxy & Serper Key</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 13px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">🌐 Proxy & Serper Key</div>', unsafe_allow_html=True)
     server_proxies = load_proxies()
     proxy_val = saved_conf.get("proxy_input", "")
-    proxy_text = st.text_area("Proxy riêng (tùy chọn)",
-                              value=proxy_val, height=78, key="proxy_input",
-                              placeholder="http://host:port\nhttp://user:pass@host:port")
-    custom_proxies = [ln.strip() for ln in proxy_text.splitlines()
-                      if ln.strip() and not ln.strip().startswith("#")]
+    proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=proxy_val, height=70, key="proxy_input", placeholder="http://host:port")
+    custom_proxies = [ln.strip() for ln in proxy_text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
     proxies_list = custom_proxies or server_proxies
-    use_proxy = st.toggle(f"Dùng proxy ({len(proxies_list)} IP)", value=bool(proxies_list),
-                          disabled=not proxies_list)
-    if server_proxies and not custom_proxies:
-        st.caption(":material/lock: Đang dùng proxy mặc định trên server")
+    use_proxy = st.toggle(f"Dùng proxy ({len(proxies_list)} IP)", value=bool(proxies_list), disabled=not proxies_list)
 
     server_serper_keys = load_serper_keys()
     serper_val = saved_conf.get("serper_input", "")
-    serper_text = st.text_area("Serper API Key (cho TÊN BRAND)",
-                               value=serper_val, height=78, key="serper_input",
-                               placeholder="dán API key serper.dev…")
-    custom_serper_keys = [k.strip() for k in serper_text.splitlines()
-                          if k.strip() and not k.strip().startswith("#")]
+    serper_text = st.text_area("Serper API Key", value=serper_val, height=70, key="serper_input", placeholder="dán key serper.dev…")
+    custom_serper_keys = [k.strip() for k in serper_text.splitlines() if k.strip() and not k.strip().startswith("#")]
     serper_keys = custom_serper_keys or server_serper_keys
-    
-    st.caption(f":material/key: {len(serper_keys)} Serper key sẵn sàng")
-    if server_serper_keys and not custom_serper_keys:
-        st.caption(":material/lock: Key server được bảo vệ an toàn")
 
-    st.divider()
-    st.markdown('<div style="font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Bộ Lọc Dữ Liệu</div>', unsafe_allow_html=True)
-    
+    st.markdown('<div style="font-size: 13px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Bộ Lọc Dữ Liệu</div>', unsafe_allow_html=True)
     filter_on_val = saved_conf.get("filter_on", False)
     filter_on = st.toggle("Bật bộ lọc traffic", value=filter_on_val)
     
     min_txt_val = saved_conf.get("min_txt", "5k")
-    min_txt = st.text_input("Lượng traffic tối thiểu", value=min_txt_val, disabled=not filter_on, placeholder="vd 5k, 1M")
+    min_txt = st.text_input("Traffic tối thiểu", value=min_txt_val, disabled=not filter_on, placeholder="vd 5k, 1M")
     
     max_txt_val = saved_conf.get("max_txt", "")
-    max_txt = st.text_input("Lượng traffic tối đa", value=max_txt_val, disabled=not filter_on, placeholder="không giới hạn")
+    max_txt = st.text_input("Traffic tối đa", value=max_txt_val, disabled=not filter_on, placeholder="không giới hạn")
     
     keep_unknown_val = saved_conf.get("keep_unknown", False)
     keep_unknown = st.toggle("Giữ web không có dữ liệu", value=keep_unknown_val, disabled=not filter_on)
     
     drop_no_site_val = saved_conf.get("drop_no_site", False)
-    drop_no_site = st.toggle("Bỏ brand không tìm thấy web", value=drop_no_site_val, disabled=not filter_on)
+    drop_no_site = st.toggle("Bỏ brand không thấy web", value=drop_no_site_val, disabled=not filter_on)
 
-    # Tự động lưu lại toàn bộ thiết lập mỗi khi thay đổi
     current_conf = {
         "theme": theme_name,
         "speed": speed,
@@ -169,42 +160,17 @@ with st.sidebar:
     if current_conf != saved_conf:
         save_settings(current_conf)
 
-    st.divider()
-    with st.expander("🔌 REST API cho Developer", expanded=False):
-        st.markdown("""
-        **Gắn API vào Web App / Backend khác:**
-        - 📄 **Swagger UI:** [/api/docs](/api/docs)
-        - ⚡ **POST Check:** `/api/check`
-        - 🔍 **GET Cache:** `/api/cache?domain=...`
-        
-        **Ví dụ cURL:**
-        """)
-        st.code("""curl -X POST "https://checktraffic.vibevic.com/api/check" \\
-  -H "Content-Type: application/json" \\
-  -d '{"inputs": ["google.com", "Nike"]}'""", language="bash")
-        
-        from pathlib import Path
-        guide_file = Path(__file__).parent / "CHECK_TRAFFIC_API.md"
-        if guide_file.exists():
-            st.download_button(
-                label="⬇️ Tải HD Tích Hợp cho AI (.md)",
-                data=guide_file.read_bytes(),
-                file_name="CHECK_TRAFFIC_API.md",
-                mime="text/markdown",
-                use_container_width=True
-            )
-
 T = THEMES[theme_name]
 
-# ============================ CSS (SaaS Design System) ============================
+# ============================ CSS (Clean SaaS Design System) ============================
 st.markdown(
     f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0');
     
-    .mi {{ font-family:'Material Symbols Rounded'; font-weight:normal; font-style:normal; font-size:20px;
-        line-height:1; vertical-align:-4px; margin-right:6px; letter-spacing:normal; text-transform:none;
+    .mi {{ font-family:'Material Symbols Rounded'; font-weight:normal; font-style:normal; font-size:18px;
+        line-height:1; vertical-align:-3px; margin-right:4px; letter-spacing:normal; text-transform:none;
         white-space:nowrap; -webkit-font-smoothing:antialiased; }}
         
     :root {{ 
@@ -216,20 +182,12 @@ st.markdown(
     html, body, .stApp, [class*="css"] {{ font-family:'Plus Jakarta Sans', sans-serif; }}
     .stApp {{ background:{T['bg']}; }}
     
-    /* Ẩn bớt chrome cũ của Streamlit */
+    /* Ẩn chrome cũ Streamlit */
     #MainMenu, footer, [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"],
     [data-testid="stDecoration"], [data-testid="stHeaderActionElements"] {{ display:none !important; }}
     header[data-testid="stHeader"] {{ background:transparent; }}
     
-    /* Nút BUNG sidebar */
-    [data-testid="stExpandSidebarButton"] button {{ 
-        background: linear-gradient(135deg, {PRIMARY}, {ACCENT}) !important; 
-        color:#fff !important; border-radius:12px !important; 
-        box-shadow:0 8px 20px -4px rgba(99,102,241,0.5); 
-    }}
-    [data-testid="stExpandSidebarButton"] button svg {{ color:#fff !important; fill:#fff !important; }}
-    
-    .block-container {{ padding-top:1.2rem; max-width:1320px; }}
+    .block-container {{ padding-top:1rem; max-width:1320px; }}
     
     /* Typography */
     .stApp, .stMarkdown, .stMarkdown p, p, label, span {{ color:{T['text']}; }}
@@ -238,7 +196,7 @@ st.markdown(
         color:{T['text']} !important; font-weight:600; letter-spacing: -0.2px; 
     }}
     
-    /* Sidebar styling */
+    /* Sidebar */
     section[data-testid="stSidebar"] {{ 
         background:{T['sidebar']}; 
         border-right:1px solid {T['border']}; 
@@ -250,7 +208,7 @@ st.markdown(
     [data-baseweb="select"]>div {{ 
         background:{T['inputbg']} !important; 
         color:{T['text']} !important;
-        border-radius:14px !important; 
+        border-radius:12px !important; 
         transition: all 0.2s ease;
     }}
     [data-baseweb="textarea"], [data-baseweb="input"] {{ 
@@ -263,119 +221,61 @@ st.markdown(
     }}
     [data-baseweb="textarea"]:focus-within, [data-baseweb="input"]:focus-within {{ 
         border-color:{PRIMARY} !important; 
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.25) !important; 
-    }}
-    
-    /* Modern SaaS Hero */
-    .saas-hero {{
-        position: relative;
-        overflow: hidden;
-        background: {T['herobg']};
-        border: 1px solid {T['heroborder']};
-        border-radius: 24px;
-        padding: 32px 36px;
-        margin-bottom: 24px;
-        box-shadow: 0 20px 50px -20px rgba(79, 70, 229, 0.25);
-    }}
-    .saas-hero-badge {{
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: {T['herobadgebgb']};
-        border: 1px solid {T['herobadgebord']};
-        backdrop-filter: blur(10px);
-        padding: 5px 14px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 600;
-        color: {T['herobadgetxt']};
-        margin-bottom: 12px;
-    }}
-    .pulse-dot {{
-        width: 7px; height: 7px;
-        border-radius: 50%;
-        background: #10B981;
-        box-shadow: 0 0 10px #10B981;
-        animation: pulse 2s infinite;
-    }}
-    @keyframes pulse {{
-        0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
-        70% {{ transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }}
-        100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
-    }}
-    .saas-hero-title {{
-        font-size: 32px;
-        font-weight: 800;
-        color: {T['herotitle']} !important;
-        letter-spacing: -0.8px;
-        margin: 0 0 8px;
-    }}
-    .gradient-text {{
-        background: linear-gradient(135deg, #4F46E5, #8B5CF6, #06B6D4);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }}
-    .saas-hero-desc {{
-        font-size: 15px;
-        color: {T['herodesc']} !important;
-        margin: 0;
-        max-width: 780px;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.15) !important; 
     }}
 
     /* Stat Cards */
-    .stats {{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom: 20px; }}
+    .stats {{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom: 18px; }}
     .stat {{ 
         background:{T['panel']}; 
         border:1px solid {T['border']}; 
-        border-radius:18px; 
-        padding:18px 20px;
-        position: relative;
-        overflow: hidden;
-        backdrop-filter: blur(12px);
+        border-radius:16px; 
+        padding:16px 18px;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }}
     .stat:hover {{
         transform: translateY(-2px);
-        box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
     }}
     .stat .row {{ display:flex; align-items:center; gap:8px; }}
-    .stat .dot {{ width:8px; height:8px; border-radius:50%; box-shadow:0 0 12px currentColor; }}
-    .stat .lbl {{ font-size:12px; color:{T['muted']} !important; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; }}
-    .stat .val {{ font-size:32px; font-weight:800; color:{T['text']} !important; margin-top:6px; letter-spacing: -0.5px; }}
+    .stat .dot {{ width:8px; height:8px; border-radius:50%; box-shadow:0 0 10px currentColor; }}
+    .stat .lbl {{ font-size:12px; color:{T['muted']} !important; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; }}
+    .stat .val {{ font-size:28px; font-weight:800; color:{T['text']} !important; margin-top:4px; letter-spacing: -0.5px; }}
     
     /* Container Panels */
     [data-testid="stVerticalBlockBorderWrapper"] {{ 
         background:{T['panel']}; 
         border:1px solid {T['border']} !important;
-        border-radius:20px; 
-        backdrop-filter: blur(16px);
+        border-radius:16px; 
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
     }}
     .panel-title {{ 
-        display:inline-flex; align-items:center; font-size:13px; font-weight:700;
-        color:{T['text']} !important; text-transform:uppercase; letter-spacing:.6px; margin:2px 0 14px;
-        padding:7px 14px; border-radius:10px; background:{T['headbg']}; border-left:3px solid {PRIMARY}; 
+        display:inline-flex; align-items:center; font-size:12.5px; font-weight:700;
+        color:{T['text']} !important; text-transform:uppercase; letter-spacing:.5px; margin:2px 0 12px;
+        padding:6px 12px; border-radius:8px; background:{T['headbg']}; border-left:3px solid {PRIMARY}; 
     }}
     .table-title {{ 
         display:inline-flex; align-items:center; gap:8px; color:#fff !important;
-        font-size:15px; font-weight:800; letter-spacing:.3px; padding:10px 22px; border-radius:12px;
+        font-size:14px; font-weight:800; letter-spacing:.3px; padding:8px 18px; border-radius:10px;
         background:linear-gradient(135deg, {PRIMARY}, {ACCENT});
-        box-shadow:0 10px 25px -8px rgba(99, 102, 241, 0.6); margin:8px 0 16px; 
+        box-shadow:0 8px 20px -6px rgba(99, 102, 241, 0.5); margin:6px 0 14px; 
     }}
 
     /* Buttons */
     .stButton>button, .stDownloadButton>button {{ 
-        border-radius:14px; font-weight:700; font-size:15px;
-        min-height:50px; padding:.65rem 1.4rem; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+        border-radius:12px; font-weight:700; font-size:14.5px;
+        min-height:46px; padding:.55rem 1.2rem; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
     }}
     [data-testid="stBaseButton-primary"] {{ 
         background:linear-gradient(135deg, {PRIMARY}, {ACCENT}) !important;
         border:none !important; 
-        box-shadow:0 12px 28px -8px rgba(99,102,241,0.7) !important;
+        box-shadow:0 8px 22px -6px rgba(99,102,241,0.6) !important;
     }}
     [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primary"] * {{ color:#fff !important; }}
     .stButton>button:hover {{ 
         transform:translateY(-2px);
-        box-shadow:0 18px 36px -10px rgba(99,102,241,0.6) !important; 
+        box-shadow:0 14px 28px -8px rgba(99,102,241,0.5) !important; 
     }}
     .stDownloadButton>button {{ background:{T['dlbg']} !important; border:1.5px solid {PRIMARY} !important; }}
     .stDownloadButton>button, .stDownloadButton>button * {{ color:{PRIMARY} !important; }}
@@ -384,41 +284,60 @@ st.markdown(
 
     /* Chips */
     .chips {{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; height:100%; }}
-    .chip {{ border:1px solid {T['border']}; border-radius:999px; padding:6px 14px; font-size:13px;
+    .chip {{ border:1px solid {T['border']}; border-radius:999px; padding:5px 12px; font-size:12.5px;
         font-weight:600; color:{T['muted']}; background:{T['panel']}; }}
     .chip b {{ color:{T['text']}; }}
-    .chip.accent {{ background:rgba(99,102,241,0.15); border-color:rgba(99,102,241,0.4); color:{PRIMARY}; }}
+    .chip.accent {{ background:rgba(99,102,241,0.12); border-color:rgba(99,102,241,0.3); color:{PRIMARY}; }}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    """
-    <div class="saas-hero">
-        <div class="saas-hero-badge">
-            <span class="pulse-dot"></span>
-            <span>Traffic Intelligence SaaS Platform</span>
-            <span style="opacity: 0.4;">|</span>
-            <span style="color: #818CF8;">REST API Active</span>
-        </div>
-        <div class="saas-hero-title">
-            Check Traffic <span class="gradient-text">Hàng Loạt</span>
-        </div>
-        <p class="saas-hero-desc">
-            Công cụ phân tích lượt truy cập website & thương hiệu tự động từ traffic.cv. Trực quan hoá thông minh, tích hợp REST API & Xuất báo cáo chuẩn Excel/CSV.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ============================ Top Header Bar ============================
+c_head1, c_head2 = st.columns([4, 1], vertical_alignment="center")
 
+with c_head1:
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom: 2px;">
+            <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.6px; color: {T['text']};">
+                CheckTraffic <span style="background: linear-gradient(135deg, #4F46E5, #8B5CF6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Pro</span>
+            </div>
+            <span style="background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25); padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                <span style="width:6px; height:6px; border-radius:50%; background:#10B981;"></span> Hybrid Cloud
+            </span>
+        </div>
+        <div style="font-size: 13px; color: {T['muted']}; margin-bottom: 14px;">
+            Phân tích Lượt truy cập & Thương hiệu tự động từ traffic.cv
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# =========================== Input (tự nhận diện domain / tên brand) ===========================
-st.text_area("Danh sách website hoặc tên brand", key="domains_input", height=180,
-             placeholder="google.com\nNike\nAtoms shoes\nhttps://glossier.com/",
-             help="Mỗi dòng 1 mục. App tự nhận biết: dòng là domain → check thẳng; "
-                  "dòng là tên brand → tự tìm website rồi check.")
+with c_head2:
+    with st.popover("⚡ REST API", help="Tài liệu & Tích hợp API cho Developer", use_container_width=True):
+        st.markdown("### ⚡ CheckTraffic REST API")
+        st.markdown("**Base URL:** `https://checktraffic.vibevic.com`  \n"
+                    "**POST Check:** `/api/check`  \n"
+                    "**GET Cache:** `/api/cache`  \n"
+                    "**Swagger UI:** [/api/docs](/api/docs)")
+        st.code("""curl -X POST "https://checktraffic.vibevic.com/api/check" \\
+  -H "Content-Type: application/json" \\
+  -d '{"inputs": ["shygems.com"], "use_cache": true}'""", language="bash")
+        guide_file = Path(__file__).parent / "CHECK_TRAFFIC_API.md"
+        if guide_file.exists():
+            st.download_button(
+                label="⬇️ Tải HD Tích Hợp AI (.md)",
+                data=guide_file.read_bytes(),
+                file_name="CHECK_TRAFFIC_API.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+
+# =========================== Input Section ===========================
+st.text_area("Danh sách website hoặc tên brand", key="domains_input", height=150,
+             placeholder="google.com\nNike\nshygems.com\nhttps://glossier.com/",
+             help="Mỗi dòng 1 mục. App tự nhận diện Domain hoặc Tên Brand để cào số liệu.")
 
 preview = parse_brand_list(st.session_state.get("domains_input", ""))
 ttl_seconds = int(ttl_days) * 24 * 3600
@@ -438,7 +357,7 @@ with col_b:
         st.markdown(f'<div class="chips">{"".join(chips)}</div>', unsafe_allow_html=True)
 
 
-# ============================ Helpers: bảng & biểu đồ ============================
+# ============================ Helpers: Bảng & Biểu đồ ============================
 def _table_html(df: pd.DataFrame) -> str:
     show = df.head(MAX_TABLE_ROWS)
 
@@ -448,75 +367,93 @@ def _table_html(df: pd.DataFrame) -> str:
 
     def change(v):
         if isinstance(v, str) and v.startswith("+"):
-            return f"color:{SUCCESS}"
+            return f"color:{SUCCESS};font-weight:600"
         if isinstance(v, str) and v.startswith("-"):
-            return f"color:{DANGER}"
+            return f"color:{DANGER};font-weight:600"
         return ""
 
-    sty = show.style
-    if "Xu hướng" in show.columns:
-        sty = sty.map(trend, subset=["Xu hướng"])
-    if "Thay đổi" in show.columns:
-        sty = sty.map(change, subset=["Thay đổi"])
-    sty = sty.hide(axis="index").set_table_attributes('class="ttable"')
-    return f'<div class="ttable-wrap">{sty.to_html()}</div>'
+    rows = []
+    for i, r in show.iterrows():
+        bg = T['tableodd'] if i % 2 == 1 else T['tablebg']
+        st_color = SUCCESS if r["Trạng thái"] == "ok" else (WARNING if r["Trạng thái"] == "no_website" else DANGER)
+
+        rows.append(f"""
+        <tr style="background:{bg}; border-bottom:1px solid {T['tableborder']}">
+            <td style="padding:10px 14px; font-weight:600">{r['Brand']}</td>
+            <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace">{r['Website']}</td>
+            <td style="padding:10px 14px; font-weight:700">{r['Lượt truy cập/tháng']}</td>
+            <td style="padding:10px 14px; {trend(r['Xu hướng'])}">{r['Xu hướng']}</td>
+            <td style="padding:10px 14px; {change(r['Thay đổi'])}">{r['Thay đổi']}</td>
+            <td style="padding:10px 14px">{r['Trang/lượt']}</td>
+            <td style="padding:10px 14px">{r['Thời lượng TB']}</td>
+            <td style="padding:10px 14px">{r['Tỷ lệ thoát']}</td>
+            <td style="padding:10px 14px">{r['Ngày đăng ký']}</td>
+            <td style="padding:10px 14px"><span style="color:{st_color}; font-weight:600">{r['Trạng thái']}</span></td>
+        </tr>
+        """)
+
+    return f"""
+    <div style="overflow-x:auto; border-radius:14px; border:1px solid {T['tableborder']}; margin-top:8px">
+    <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px">
+        <thead>
+            <tr style="background:{T['headbg']}; color:{T['text']}; border-bottom:1.5px solid {T['tableborder']}">
+                <th style="padding:12px 14px">Brand</th>
+                <th style="padding:12px 14px">Website</th>
+                <th style="padding:12px 14px">Lượt truy cập</th>
+                <th style="padding:12px 14px">Xu hướng</th>
+                <th style="padding:12px 14px">Thay đổi</th>
+                <th style="padding:12px 14px">Trang/lượt</th>
+                <th style="padding:12px 14px">Thời lượng</th>
+                <th style="padding:12px 14px">Tỷ lệ thoát</th>
+                <th style="padding:12px 14px">Ngày tạo</th>
+                <th style="padding:12px 14px">Trạng thái</th>
+            </tr>
+        </thead>
+        <tbody>{"".join(rows)}</tbody>
+    </table>
+    </div>
+    """
 
 
-VN_LOCALE = {"noRowsToShow": "Không có dữ liệu", "loadingOoo": "Đang tải…"}
-
-
-def _render_grid(df: pd.DataFrame, key: str):
-    """Bảng AgGrid: click tiêu đề cột để sắp xếp lớn/nhỏ; tiêu đề 1 dòng; cho cuộn ngang."""
+def _render_grid(df: pd.DataFrame, key: str = "grid"):
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(sortable=True, filter=False, resizable=True,
-                                suppressMenu=True, width=150, minWidth=110)
-    if "Website" in df.columns:
-        gb.configure_column("Website", width=185, minWidth=150)
-    trend_js = JsCode(f"""function(p){{
-        if(p.value==='Tăng') return {{color:'{SUCCESS}', fontWeight:'700'}};
-        if(p.value==='Giảm') return {{color:'{DANGER}', fontWeight:'700'}};
-        return {{}};
-    }}""")
-    change_js = JsCode(f"""function(p){{
-        if(p.value && p.value[0]==='+') return {{color:'{SUCCESS}'}};
-        if(p.value && p.value[0]==='-') return {{color:'{DANGER}'}};
-        return {{}};
-    }}""")
-    if "Xu hướng" in df.columns:
-        gb.configure_column("Xu hướng", cellStyle=trend_js)
-    if "Thay đổi" in df.columns:
-        gb.configure_column("Thay đổi", cellStyle=change_js)
-    # Sắp xếp theo SỐ (34.83K, 1.2M, 2.5B…) thay vì theo chữ
-    visits_cmp = JsCode("""function(a,b){
-        function n(v){ if(v==null) return 0; v=(''+v).replace(/,/g,'');
-            var m=v.match(/([0-9.]+)\\s*([KMB]?)/i); if(!m) return parseFloat(v)||0;
-            var x=parseFloat(m[1])||0, s=(m[2]||'').toUpperCase();
-            if(s==='K')x*=1e3; else if(s==='M')x*=1e6; else if(s==='B')x*=1e9; return x; }
-        return n(a)-n(b); }""")
-    num_cmp = JsCode("function(a,b){return (parseFloat(a)||0)-(parseFloat(b)||0);}")
-    if "Lượt truy cập/tháng" in df.columns:
-        gb.configure_column("Lượt truy cập/tháng", comparator=visits_cmp)
-    for c in ("Thay đổi", "Trang/lượt", "Tỷ lệ thoát"):
-        if c in df.columns:
-            gb.configure_column(c, comparator=num_cmp)
-    gb.configure_grid_options(localeText=VN_LOCALE)
-    bgf = f"{T['tablebg']} !important"
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+
+    def col(field, name, width=None, flex=None, cell_style=None, pinned=None):
+        kw = {"headerName": name}
+        if width: kw["width"] = width
+        if flex: kw["flex"] = flex
+        if cell_style: kw["cellStyle"] = cell_style
+        if pinned: kw["pinned"] = pinned
+        gb.configure_column(field, **kw)
+
+    col("Brand", "Brand", flex=1, pinned="left")
+    col("Website", "Website", flex=1.2)
+    col("Lượt truy cập/tháng", "Lượt truy cập/tháng", width=140)
+    col("Xu hướng", "Xu hướng", width=110,
+        cell_style=JsCode(f"params => params.value === 'Tăng' ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : (params.value === 'Giảm' ? {{'color': '{DANGER}', 'fontWeight': '700'}} : null)"))
+    col("Thay đổi", "Thay đổi", width=110,
+        cell_style=JsCode(f"params => typeof params.value === 'string' && params.value.startsWith('+') ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : (typeof params.value === 'string' && params.value.startsWith('-') ? {{'color': '{DANGER}', 'fontWeight': '700'}} : null)"))
+    col("Trang/lượt", "Trang/lượt", width=105)
+    col("Thời lượng TB", "Thời lượng TB", width=110)
+    col("Tỷ lệ thoát", "Tỷ lệ thoát", width=110)
+    col("Ngày đăng ký", "Ngày đăng ký", width=120)
+    col("Trạng thái", "Trạng thái", width=110,
+        cell_style=JsCode(f"params => params.value === 'ok' ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : {{'color': '{DANGER}', 'fontWeight': '700'}}"))
+
+    bgf = T['tablebg']
     css = {
-        ".ag-root-wrapper": {"border": f"1px solid {T['tableborder']}", "border-radius": "14px",
+        ".ag-root-wrapper": {"border-radius": "14px", "border": f"1px solid {T['tableborder']}",
                              "background-color": bgf},
         ".ag-header": {"background-image": f"linear-gradient(120deg,{ACCENT},{PRIMARY})",
                        "border-bottom": "none"},
         ".ag-header-cell-label": {"color": "#ffffff", "font-weight": "700", "font-size": "13px"},
-        ".ag-header-cell-text": {"white-space": "nowrap", "overflow": "hidden",
-                                 "text-overflow": "ellipsis"},
+        ".ag-header-cell-text": {"white-space": "nowrap", "overflow": "hidden", "text-overflow": "ellipsis"},
         ".ag-header-cell": {"border": "none"},
-        # ép nền tối/sáng cho mọi lớp thân bảng (màu Tăng/Giảm là inline nên không bị ảnh hưởng)
-        ".ag-body-viewport, .ag-center-cols-viewport, .ag-center-cols-clipper, "
-        ".ag-body, .ag-body-viewport-wrapper": {"background-color": bgf},
+        ".ag-body-viewport, .ag-center-cols-viewport, .ag-center-cols-clipper, .ag-body, .ag-body-viewport-wrapper": {"background-color": bgf},
         ".ag-row": {"background-color": bgf, "border-color": f"{T['tableborder']} !important"},
         ".ag-row.ag-row-odd": {"background-color": f"{T['tableodd']} !important"},
         ".ag-row.ag-row-hover": {"background-color": f"{T['tablehover']} !important"},
-        # chữ ô: KHÔNG !important để cellStyle (Tăng/Giảm) inline vẫn thắng
         ".ag-cell, .ag-cell-value": {"color": T['text']},
         ".ag-theme-alpine": {
             "--ag-background-color": T['tablebg'],
@@ -526,10 +463,10 @@ def _render_grid(df: pd.DataFrame, key: str):
             "--ag-secondary-foreground-color": T['muted'],
             "--ag-border-color": T['tableborder'],
             "--ag-row-hover-color": T['tablehover'],
-            "--ag-font-family": "'IBM Plex Sans', sans-serif",
+            "--ag-font-family": "'Plus Jakarta Sans', sans-serif",
             "--ag-font-size": "13px",
-            "--ag-header-height": "46px",
-            "--ag-row-height": "44px",
+            "--ag-header-height": "44px",
+            "--ag-row-height": "42px",
         },
     }
     AgGrid(df, gridOptions=gb.build(), theme="alpine", custom_css=css,
@@ -557,7 +494,7 @@ def _chart_top(results):
                         scale=alt.Scale(domain=["Tăng", "Giảm", "—"], range=[SUCCESS, DANGER, T['muted']]),
                         legend=None),
         tooltip=["Website", alt.Tooltip("Visits:Q", format=",")],
-    ).properties(height=330)
+    ).properties(height=320)
     return _dark(chart)
 
 
@@ -567,12 +504,12 @@ def _chart_trend(results):
     if up + down == 0:
         return None
     df = pd.DataFrame({"Xu hướng": ["Tăng", "Giảm"], "Số web": [up, down]})
-    chart = alt.Chart(df).mark_arc(innerRadius=62, cornerRadius=3).encode(
+    chart = alt.Chart(df).mark_arc(innerRadius=60, cornerRadius=3).encode(
         theta="Số web:Q",
         color=alt.Color("Xu hướng:N", scale=alt.Scale(domain=["Tăng", "Giảm"], range=[SUCCESS, DANGER]),
                         legend=alt.Legend(orient="bottom", title=None)),
         tooltip=["Xu hướng", "Số web"],
-    ).properties(height=330)
+    ).properties(height=320)
     return _dark(chart)
 
 
@@ -614,10 +551,9 @@ def _run_and_stream(items, settings, serper_keys=None):
         if kind == "resolve":
             done, total, brand, dom = rest
             prog_box.progress(done / total if total else 1.0)
-            mark = dom if dom else "✗ không thấy web"
-            status.markdown(f":material/search: Tìm website **{done}/{total}** — {brand} → {mark}")
+            status.markdown(f":material/search: Đang tìm website từ tên brand... **{done}/{total}**")
         elif kind == "progress":
-            done, total = rest
+            done, total = rest[:2]
             prog_box.progress(done / total if total else 1.0)
             elapsed = time.time() - started
             rate = done / elapsed if elapsed > 0 else 0
@@ -628,7 +564,6 @@ def _run_and_stream(items, settings, serper_keys=None):
             results.extend(rest[0])
             table_area.markdown(_table_html(results_to_dataframe(results)), unsafe_allow_html=True)
         elif kind == "done":
-            # xoá hẳn UI tạm (thanh tiến trình + bảng streaming) → chỉ còn bảng kết quả cuối
             prog_box.empty()
             status.empty()
             table_area.empty()
@@ -643,8 +578,7 @@ if start:
     if not preview:
         st.warning("Chưa có dữ liệu hợp lệ — hãy dán danh sách vào ô trên.")
     elif n_brand and not serper_keys:
-        st.warning(f"Có {n_brand} tên brand cần tìm web nhưng chưa có Serper API key — "
-                   "thêm key ở mục Thiết lập (sidebar).")
+        st.warning(f"Có {n_brand} tên brand cần tìm web nhưng chưa có Serper API key.")
     else:
         settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=use_cache,
                                ttl=ttl_seconds, headless=True,
@@ -682,7 +616,7 @@ if st.session_state.get("results"):
     c1, c2 = st.columns([2, 1])
     with c1:
         with st.container(border=True):
-            st.markdown('<div class="panel-title"><span class="mi" style="font-size:17px">bar_chart</span>'
+            st.markdown('<div class="panel-title"><span class="mi" style="font-size:16px">bar_chart</span>'
                         'Top website theo lượt truy cập</div>', unsafe_allow_html=True)
             ch = _chart_top(results)
             if ch is not None:
@@ -691,7 +625,7 @@ if st.session_state.get("results"):
                 st.caption("Chưa có dữ liệu để vẽ.")
     with c2:
         with st.container(border=True):
-            st.markdown('<div class="panel-title"><span class="mi" style="font-size:17px">donut_small</span>'
+            st.markdown('<div class="panel-title"><span class="mi" style="font-size:16px">donut_small</span>'
                         'Tỷ lệ tăng / giảm</div>', unsafe_allow_html=True)
             ch2 = _chart_trend(results)
             if ch2 is not None:
@@ -699,14 +633,13 @@ if st.session_state.get("results"):
             else:
                 st.caption("Chưa có dữ liệu xu hướng.")
 
-    st.markdown('<div class="table-title"><span class="mi" style="font-size:19px">table_rows</span>'
+    st.markdown('<div class="table-title"><span class="mi" style="font-size:18px">table_rows</span>'
                 'Bảng kết quả</div>', unsafe_allow_html=True)
     _render_grid(results_to_dataframe(results).head(MAX_TABLE_ROWS), key=f"grid_{theme_name}")
     if len(results) > MAX_TABLE_ROWS:
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(results)} dòng — tải file để xem đầy đủ.")
 
-    # khoảng cách giữa bảng và nút tải
-    st.markdown('<div style="height:26px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
     dl1, dl2 = st.columns(2)
     dl1.download_button(":material/download: Tải Excel (.xlsx)", data=results_to_xlsx_bytes(results),
                         file_name="traffic_results.xlsx",

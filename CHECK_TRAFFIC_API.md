@@ -1,146 +1,66 @@
-# 🚀 CheckTraffic API — AI Integration Specs
-
-> **Hướng dẫn cho AI / Dev:** Sử dụng API này để lấy lượt truy cập hàng tháng và các chỉ số traffic của bất kỳ website/brand nào, sau đó lưu vào Supabase.
-
----
-
-## 📌 1. API Specs
+# ⚡ CheckTraffic REST API Documentation
 
 - **Base URL:** `https://checktraffic.vibevic.com`
-- **Swagger Docs:** `https://checktraffic.vibevic.com/api/docs`
-- **CORS:** Allowed `*` (Gọi được cả từ Browser lẫn Server).
+- **Swagger UI:** `https://checktraffic.vibevic.com/api/docs`
 
 ---
 
-## ⚡ 2. Endpoints
+## 🟢 1. Endpoint: `POST /api/check`
 
-### 🟢 `POST /api/check` — Check Traffic theo danh sách
+Lấy số liệu traffic hàng tháng và các chỉ số chi tiết cho danh sách website hoặc tên brand.
 
-- **Request Body (JSON):**
-  ```json
-  {
-    "inputs": ["google.com", "vnexpress.net", "Nike"],
-    "use_cache": true,
-    "speed": "Vừa"
-  }
-  ```
+### Request Body (JSON)
+```json
+{
+  "inputs": ["shygems.com", "Nike", "google.com"],
+  "use_cache": true,
+  "force_refresh": false,
+  "concurrency": 3,
+  "speed": "Vừa"
+}
+```
 
-- **Response Body (JSON - 200 OK):**
-  ```json
-  {
-    "status": "success",
-    "total_inputs": 3,
-    "data": [
-      {
-        "input": "google.com",
-        "brand_name": "google.com",
-        "domain": "google.com",
-        "total_visits": "85.4B",
-        "change": "-1.2%",
-        "trend": "Giảm",
-        "pages_per_visit": "2.8",
-        "bounce_rate": "28.5%",
-        "avg_duration": "10:30",
-        "status": "ok",
-        "cache_hit": true
-      },
-      {
-        "input": "Nike",
-        "brand_name": "Nike",
-        "domain": "nike.com",
-        "total_visits": "142.5M",
-        "change": "+3.5%",
-        "trend": "Tăng",
-        "pages_per_visit": "3.5",
-        "bounce_rate": "42.1%",
-        "avg_duration": "03:15",
-        "status": "ok",
-        "cache_hit": false
-      }
-    ]
-  }
-  ```
+| Tham số | Kiểu | Mặc định | Mô tả |
+| :--- | :--- | :--- | :--- |
+| `inputs` | `Array<string>` | **Bắt buộc** | Danh sách tên miền hoặc tên Brand (ví dụ: `["google.com", "Nike"]`) |
+| `use_cache` | `boolean` | `true` | Ưu tiên lấy từ Supabase/Cache nếu có (< 0.05s) |
+| `force_refresh` | `boolean` | `false` | Bắt buộc quét mới 100% và ghi đè dữ liệu mới lên Supabase |
+| `concurrency` | `integer` | `3` | Số luồng quét song song (tối đa 5) |
 
 ---
 
-### 🔍 `GET /api/cache?domain=google.com` — Tra cứu nhanh từ Cache (< 0.1s)
-
-- **Response (200 OK):**
-  ```json
-  {
-    "status": "success",
-    "domain": "google.com",
-    "data": {
-      "domain": "google.com",
-      "total_visits": "85.4B",
-      "change": "-1.2%",
-      "trend": "Giảm",
-      "pages_per_visit": "2.8",
-      "avg_duration": "10:30",
-      "bounce_rate": "28.5%",
+### Response Body (JSON 200 OK)
+```json
+{
+  "status": "success",
+  "total_inputs": 1,
+  "data": [
+    {
+      "input": "shygems.com",
+      "brand_name": "shygems.com",
+      "domain": "shygems.com",
+      "total_visits": "11.44K",
+      "monthly_visits_raw": "11.44K",
+      "change": "+24.82%",
+      "trend": "Tăng",
+      "pages_per_visit": "3.15",
+      "avg_duration": "00:01:23",
+      "bounce_rate": "50.78%",
+      "top_regions": [{"country": "United States", "share": "45.2%"}],
+      "top_keywords": [{"keyword": "shygems", "traffic": "2.1K"}],
       "status": "ok",
       "cache_hit": true
     }
-  }
-  ```
-
----
-
-## 🤖 3. Prompt Mẫu Cho AI Code (Dán câu lệnh này cho AI)
-
-```text
-Hãy viết giúp tôi hàm TypeScript/JavaScript bằng Next.js / Node.js để:
-1. Nhận một domain hoặc tên brand từ input của user.
-2. Gọi POST API https://checktraffic.vibevic.com/api/check với body: {"inputs": [domain], "use_cache": true}.
-3. Lấy dữ liệu trả về (total_visits, change, trend, pages_per_visit, avg_duration, bounce_rate).
-4. Lưu dữ liệu này vào bảng Supabase 'website_traffic' bằng @supabase/supabase-js.
+  ]
+}
 ```
 
 ---
 
-## 💻 4. Code Snippet Chuẩn (Next.js / Node.js + Supabase)
+## 💻 2. Ví dụ cURL
 
-```typescript
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-export async function fetchAndSaveTraffic(targetInput: string) {
-  // 1. Gọi CheckTraffic API
-  const res = await fetch('https://checktraffic.vibevic.com/api/check', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      inputs: [targetInput],
-      use_cache: true
-    })
-  })
-
-  const json = await res.json()
-  if (!json.data || json.data.length === 0) throw new Error('No data found')
-
-  const item = json.data[0]
-
-  // 2. Lưu vào Supabase Database
-  const { data, error } = await supabase
-    .from('website_traffic')
-    .insert([{
-      domain: item.domain,
-      brand_name: item.brand_name,
-      total_visits: item.total_visits,
-      change: item.change,
-      trend: item.trend,
-      pages_per_visit: item.pages_per_visit,
-      avg_duration: item.avg_duration,
-      bounce_rate: item.bounce_rate,
-      status: item.status,
-      checked_at: new Date().toISOString()
-    }])
-
-  if (error) throw error
-  return item
-}
+```bash
+curl -X POST "https://checktraffic.vibevic.com/api/check" \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": ["shygems.com"], "use_cache": true}'
 ```
