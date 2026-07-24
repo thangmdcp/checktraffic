@@ -691,8 +691,9 @@ if start:
         settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=use_cache,
                                ttl=ttl_seconds, headless=True,
                                proxies=proxies_list if use_proxy else None,
-                               cf_cookie=p_cf_cookie if p_cf_cookie else None,
                                concurrency=concurrency)
+        if p_cf_cookie:
+            setattr(settings, "cf_cookie", p_cf_cookie.strip())
         try:
             outcome = _run_and_stream(preview, settings, serper_keys=serper_keys)
             st.session_state["results"] = outcome.results
