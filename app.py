@@ -415,62 +415,21 @@ drop_no_site = saved_conf.get("drop_no_site", False)
 cache_mgr = Cache()
 saved_projects = cache_mgr.get_projects()
 project_names = [p["name"] for p in saved_projects]
-all_proj_options = ["📊 Tất cả dữ liệu trong Supabase"] + project_names
+all_proj_options = project_names + ["🌐 Tất cả web tích lũy trong Supabase"] if project_names else ["🌐 Tất cả web tích lũy trong Supabase"]
 
-# Auto-load initial results from Supabase if session_state["results"] is empty
+# Auto-load initial results from most recent project (or all if no project)
 if "results" not in st.session_state or st.session_state["results"] is None:
-    all_doms = cache_mgr.get_all_saved_domains()
-    if all_doms:
-        initial_map = cache_mgr.get_many(all_doms)
+    if project_names:
+        initial_doms = cache_mgr.get_project_domains(project_names[0])
+        st.session_state["last_sel_project"] = project_names[0]
+    else:
+        initial_doms = cache_mgr.get_all_saved_domains()
+        st.session_state["last_sel_project"] = "🌐 Tất cả web tích lũy trong Supabase"
+    
+    if initial_doms:
+        initial_map = cache_mgr.get_many(initial_doms)
         st.session_state["results"] = list(initial_map.values())
 cache_mgr.close()
-
-st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
-with st.container(border=True):
-    col_p1, col_p2, col_p3 = st.columns([2.5, 1.8, 1.8], vertical_alignment="center")
-    with col_p1:
-        sel_project = st.selectbox("📁 Chọn bảng dữ liệu đã lưu", all_proj_options, key="project_select")
-    with col_p2:
-        proj_time_str = "Tự động đồng bộ"
-        if sel_project != "📊 Tất cả dữ liệu trong Supabase":
-            p_match = next((p for p in saved_projects if p["name"] == sel_project), None)
-            if p_match and p_match.get("updated_at"):
-                import datetime
-                dt = datetime.datetime.fromtimestamp(p_match["updated_at"])
-                proj_time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-        st.markdown(f"📅 **Cập nhật gần nhất:**  \n`<span style='color:{PRIMARY}; font-weight:600'>{proj_time_str}</span>`", unsafe_allow_html=True)
-    with col_p3:
-        btn_refresh_project = st.button("🔄 Cập nhật dữ liệu mới nhất", use_container_width=True, help="Quét lại mới 100% từ live web cho tất cả website trong bảng này và ghi đè vào Supabase")
-
-if btn_refresh_project:
-    c_mgr = Cache()
-    if sel_project == "📊 Tất cả dữ liệu trong Supabase":
-        target_domains = c_mgr.get_all_saved_domains()
-    else:
-        target_domains = c_mgr.get_project_domains(sel_project)
-    c_mgr.close()
-    if target_domains:
-        settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=False, headless=True, proxies=proxies_list if use_proxy else None, concurrency=concurrency)
-        st.toast(f"Đang quét lại {len(target_domains)} website...", icon="🔄")
-        outcome = _run_and_stream(target_domains, settings, serper_keys=serper_keys)
-        st.session_state["results"] = outcome.results
-        c_mgr = Cache()
-        if sel_project != "📊 Tất cả dữ liệu trong Supabase":
-            c_mgr.save_project(sel_project, target_domains)
-        c_mgr.close()
-        st.rerun()
-
-elif sel_project != st.session_state.get("last_sel_project"):
-    st.session_state["last_sel_project"] = sel_project
-    c_mgr = Cache()
-    if sel_project == "📊 Tất cả dữ liệu trong Supabase":
-        target_domains = c_mgr.get_all_saved_domains()
-    else:
-        target_domains = c_mgr.get_project_domains(sel_project)
-    if target_domains:
-        res_map = c_mgr.get_many(target_domains)
-        st.session_state["results"] = list(res_map.values())
-    c_mgr.close()
 
 
 # =========================== Input Section ===========================
@@ -810,12 +769,79 @@ if st.session_state.get("results"):
             else:
                 st.caption("Chưa có dữ liệu xu hướng.")
 
-    col_t1, col_t2 = st.columns([1.8, 2.2], vertical_alignment="center")
-    with col_t1:
-        st.markdown('<div class="table-title" style="margin:0"><span class="mi" style="font-size:17px">table_rows</span>'
-                    'Bảng kết quả</div>', unsafe_allow_html=True)
-    with col_t2:
-        search_kw = st.text_input("🔍 Tìm kiếm nhanh", placeholder="🔍 Gõ tên website hoặc brand để tìm nhanh...", key="table_search_input", label_visibility="collapsed")
+    # Project selection logic
+    c_mgr = Cache()
+    saved_projects = c_mgr.get_projects()
+    project_names = [p["name"] for p in saved_projects]
+    all_proj_options = project_names + ["🌐 Tất cả web tích lũy"] if project_names else ["🌐 Tất cả web tích lũy"]
+    c_mgr.close()
+
+    # --- Unified Compact Header Bar Above Table ---
+    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+    ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([1.8, 2.0, 1.1, 1.1, 1.8, 1.1, 1.1], vertical_alignment="center")
+    
+    with ch1:
+        st.markdown(f'<div class="table-title" style="margin:0"><span class="mi" style="font-size:17px">table_rows</span> Kết quả</div>', unsafe_allow_html=True)
+    with ch2:
+        sel_project = st.selectbox("Dự án", all_proj_options, key="project_select", label_visibility="collapsed")
+    with ch3:
+        btn_refresh_project = st.button("🔄 Quét lại", use_container_width=True, help="Quét mới 100% từ live web cho tất cả website trong bảng này")
+    with ch4:
+        with st.popover("💾 Lưu", use_container_width=True):
+            st.markdown("##### 💾 Lưu danh sách")
+            save_name_input = st.text_input("Tên danh sách", placeholder="Ví dụ: Brand Q3", key="save_project_name")
+            btn_save = st.button("Lưu ngay", type="primary", use_container_width=True)
+            if btn_save and save_name_input.strip():
+                current_res = st.session_state.get("results") or []
+                doms_to_save = list({r.domain.lower().strip() for r in current_res if r.domain})
+                if not doms_to_save and preview:
+                    doms_to_save = list({d.lower().strip() for d in preview if d})
+                if doms_to_save:
+                    c_m = Cache()
+                    c_m.save_project(save_name_input.strip(), doms_to_save)
+                    c_m.close()
+                    st.toast(f"Đã lưu '{save_name_input.strip()}'!", icon="💾")
+                    st.session_state["last_sel_project"] = save_name_input.strip()
+                    st.rerun()
+                else:
+                    st.warning("Chưa có tên miền nào để lưu.")
+    with ch5:
+        search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Tìm nhanh...", key="table_search_input", label_visibility="collapsed")
+    with ch6:
+        st.download_button("📥 Excel", data=results_to_xlsx_bytes(results), file_name="traffic_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    with ch7:
+        st.download_button("📥 CSV", data=results_to_csv_bytes(results), file_name="traffic_results.csv", mime="text/csv", use_container_width=True)
+
+    # Handle project selection or refresh click
+    if btn_refresh_project:
+        c_m = Cache()
+        if sel_project.startswith("🌐"):
+            target_domains = c_m.get_all_saved_domains()
+        else:
+            target_domains = c_m.get_project_domains(sel_project)
+        c_m.close()
+        if target_domains:
+            settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=False, headless=True, proxies=proxies_list if use_proxy else None, concurrency=concurrency)
+            st.toast(f"Đang quét lại {len(target_domains)} website...", icon="🔄")
+            outcome = _run_and_stream(target_domains, settings, serper_keys=serper_keys)
+            st.session_state["results"] = outcome.results
+            c_m = Cache()
+            if not sel_project.startswith("🌐"):
+                c_m.save_project(sel_project, target_domains)
+            c_m.close()
+            st.rerun()
+    elif sel_project != st.session_state.get("last_sel_project"):
+        st.session_state["last_sel_project"] = sel_project
+        c_m = Cache()
+        if sel_project.startswith("🌐"):
+            target_domains = c_m.get_all_saved_domains()
+        else:
+            target_domains = c_m.get_project_domains(sel_project)
+        if target_domains:
+            res_map = c_m.get_many(target_domains)
+            st.session_state["results"] = list(res_map.values())
+        c_m.close()
+        st.rerun()
 
     filtered_results = results
     if search_kw.strip():
@@ -832,17 +858,6 @@ if st.session_state.get("results"):
     _render_grid(results_to_dataframe(filtered_results).head(MAX_TABLE_ROWS), key=f"grid_{theme_name}_{hash(search_kw)}")
     if len(filtered_results) > MAX_TABLE_ROWS:
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(filtered_results)} dòng — tải file để xem đầy đủ.")
-
-    # Hiển thị Top Quốc Gia & Top Từ Khóa chi tiết (nếu có dữ liệu)
-    st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
-    dl1, dl2 = st.columns(2)
-    dl1.download_button(":material/download: Tải Excel (.xlsx)", data=results_to_xlsx_bytes(results),
-                        file_name="traffic_results.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True)
-    dl2.download_button(":material/download: Tải CSV", data=results_to_csv_bytes(results),
-                        file_name="traffic_results.csv", mime="text/csv",
-                        use_container_width=True)
 
 
 # ============================ Footer ============================
