@@ -415,17 +415,12 @@ drop_no_site = saved_conf.get("drop_no_site", False)
 cache_mgr = Cache()
 saved_projects = cache_mgr.get_projects()
 project_names = [p["name"] for p in saved_projects]
-all_proj_options = project_names + ["🌐 Tất cả web tích lũy trong Supabase"] if project_names else ["🌐 Tất cả web tích lũy trong Supabase"]
+all_proj_options = ["🌐 Tất cả web tích lũy trong Supabase"] + project_names
 
-# Auto-load initial results from most recent project (or all if no project)
+# Auto-load initial results from Supabase if session_state["results"] is empty
 if "results" not in st.session_state or st.session_state["results"] is None:
-    if project_names:
-        initial_doms = cache_mgr.get_project_domains(project_names[0])
-        st.session_state["last_sel_project"] = project_names[0]
-    else:
-        initial_doms = cache_mgr.get_all_saved_domains()
-        st.session_state["last_sel_project"] = "🌐 Tất cả web tích lũy trong Supabase"
-    
+    initial_doms = cache_mgr.get_all_saved_domains()
+    st.session_state["last_sel_project"] = "🌐 Tất cả web tích lũy trong Supabase"
     if initial_doms:
         initial_map = cache_mgr.get_many(initial_doms)
         st.session_state["results"] = list(initial_map.values())
@@ -461,29 +456,9 @@ with st.container(border=True):
     n_brand = len(preview) - n_domain
 
     st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-    col_a1, col_a2, col_b = st.columns([1.3, 1.3, 2.4], vertical_alignment="center")
-    with col_a1:
+    col_a, col_b = st.columns([1.3, 3.7], vertical_alignment="center")
+    with col_a:
         start = st.button(":material/play_circle: Bắt đầu check", type="primary", use_container_width=True)
-    with col_a2:
-        with st.popover("💾 Lưu danh sách này", use_container_width=True):
-            st.markdown("### 💾 Lưu danh sách vào Supabase")
-            save_name_input = st.text_input("Tên danh sách / dự án", placeholder="Ví dụ: Brand Đối Thủ Q3", key="save_project_name")
-            btn_save = st.button("Lưu ngay vào Supabase", type="primary", use_container_width=True)
-            if btn_save and save_name_input.strip():
-                current_res = st.session_state.get("results") or []
-                doms_to_save = [r.domain for r in current_res if r.domain]
-                if not doms_to_save and preview:
-                    doms_to_save = preview
-                if doms_to_save:
-                    c_mgr = Cache()
-                    ts_saved = c_mgr.save_project(save_name_input.strip(), doms_to_save)
-                    c_mgr.close()
-                    st.toast(f"Đã lưu danh sách '{save_name_input.strip()}' vào Supabase!", icon="💾")
-                    st.session_state["last_sel_project"] = save_name_input.strip()
-                    st.rerun()
-                else:
-                    st.warning("Chưa có tên miền nào để lưu.")
-
     with col_b:
         if preview:
             chips = [f'<span class="chip accent"><b>{len(preview)}</b> mục tổng</span>']
