@@ -751,25 +751,32 @@ if st.session_state.get("results"):
     all_proj_options = ["🌐 Tất cả web đã check"] + project_names
     c_mgr.close()
 
+    # Project selection logic
+    c_mgr = Cache()
+    saved_projects = c_mgr.get_projects()
+    project_names = [p["name"] for p in saved_projects]
+    all_proj_options = ["🌐 Tất cả web đã check"] + project_names
+    c_mgr.close()
+
     # --- Unified Compact Header Bar Above Table ---
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-    ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([1.5, 2.2, 1.1, 1.1, 2.0, 1.0, 1.0], vertical_alignment="center")
+    ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([2.5, 0.7, 0.7, 0.7, 3.4, 1.0, 1.0], vertical_alignment="center")
     
     with ch1:
-        st.markdown(f'<div style="font-size:15px; font-weight:700; color:{T["text"]}; display:flex; align-items:center; gap:6px;"><span class="mi" style="font-size:17px; color:{PRIMARY}">table_rows</span> Kết quả</div>', unsafe_allow_html=True)
-    with ch2:
         sel_project = st.selectbox("Dự án", all_proj_options, key="project_select", label_visibility="collapsed")
+    
+    with ch2:
+        btn_refresh_project = st.button("🔄", use_container_width=True, help="Quét mới 100% từ live web cho tất cả website trong bảng này")
+    
     with ch3:
-        btn_refresh_project = st.button("🔄 Quét lại", use_container_width=True, help="Quét mới 100% từ live web cho tất cả website trong bảng này")
-    with ch4:
-        with st.popover("💾 Quản lý", use_container_width=True):
+        with st.popover("💾", use_container_width=True, help="Quản lý / Lưu / Đổi tên dự án"):
             st.markdown("##### 💾 Quản lý dự án / Bảng")
             default_name_val = "" if sel_project.startswith("🌐") else sel_project
             save_name_input = st.text_input("Tên dự án", value=default_name_val, placeholder="Ví dụ: Brand Q3", key="proj_name_edit_input")
             
             b_col1, b_col2 = st.columns(2)
             with b_col1:
-                btn_save_new = st.button("💾 Lưu dự án", type="primary", use_container_width=True)
+                btn_save_new = st.button("💾 Lưu mới", type="primary", use_container_width=True)
             with b_col2:
                 btn_rename = st.button("✏️ Đổi tên", use_container_width=True, disabled=sel_project.startswith("🌐"))
             
@@ -804,12 +811,28 @@ if st.session_state.get("results"):
                 st.session_state["last_sel_project"] = save_name_input.strip()
                 st.rerun()
 
+    with ch4:
+        with st.popover("🎛️", use_container_width=True, help="Bộ lọc Traffic nâng cao"):
+            st.markdown("##### 🎛️ Bộ lọc Traffic dự án")
+            flt_on = st.toggle("Bật bộ lọc traffic", value=st.session_state.get("row_flt_on", False), key="row_flt_toggle")
+            st.session_state["row_flt_on"] = flt_on
+            flt_min = st.text_input("Traffic tối thiểu", value=st.session_state.get("row_flt_min", "5k"), disabled=not flt_on, key="row_flt_min_input")
+            st.session_state["row_flt_min"] = flt_min
+            flt_max = st.text_input("Traffic tối đa", value=st.session_state.get("row_flt_max", ""), disabled=not flt_on, key="row_flt_max_input")
+            st.session_state["row_flt_max"] = flt_max
+            flt_keep_unk = st.toggle("Giữ web không có dữ liệu", value=st.session_state.get("row_flt_keep", False), disabled=not flt_on, key="row_flt_keep_toggle")
+            st.session_state["row_flt_keep"] = flt_keep_unk
+            flt_drop_no_site = st.toggle("Bỏ brand không thấy web", value=st.session_state.get("row_flt_drop", False), disabled=not flt_on, key="row_flt_drop_toggle")
+            st.session_state["row_flt_drop"] = flt_drop_no_site
+
     with ch5:
-        search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Tìm nhanh...", key="table_search_input", label_visibility="collapsed")
+        search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Gõ tên website hoặc brand để tìm nhanh...", key="table_search_input", label_visibility="collapsed")
+    
     with ch6:
-        st.download_button("📥 Excel", data=results_to_xlsx_bytes(results), file_name="traffic_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        st.download_button("📊 Excel", data=results_to_xlsx_bytes(results), file_name="traffic_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    
     with ch7:
-        st.download_button("📥 CSV", data=results_to_csv_bytes(results), file_name="traffic_results.csv", mime="text/csv", use_container_width=True)
+        st.download_button("📄 CSV", data=results_to_csv_bytes(results), file_name="traffic_results.csv", mime="text/csv", use_container_width=True)
 
     # Handle project selection or refresh click
     if btn_refresh_project:
@@ -842,11 +865,22 @@ if st.session_state.get("results"):
         c_m.close()
         st.rerun()
 
+    # Apply Traffic Filters if enabled from popover
     filtered_results = results
+    if st.session_state.get("row_flt_on"):
+        filtered_results = filter_results(
+            filtered_results,
+            min_visits=parse_number(st.session_state.get("row_flt_min", "")) if st.session_state.get("row_flt_min", "").strip() else None,
+            max_visits=parse_number(st.session_state.get("row_flt_max", "")) if st.session_state.get("row_flt_max", "").strip() else None,
+            keep_unknown=st.session_state.get("row_flt_keep", False),
+            require_website=st.session_state.get("row_flt_drop", False),
+        )
+
+    # Apply Instant Search Filter
     if search_kw.strip():
         q = search_kw.strip().lower()
         filtered_results = [
-            r for r in results
+            r for r in filtered_results
             if q in (r.domain or "").lower()
             or q in (r.brand_name or "").lower()
             or q in (r.monthly_visits_raw or "").lower()
