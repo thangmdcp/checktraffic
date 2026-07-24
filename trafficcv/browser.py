@@ -62,6 +62,8 @@ class BrowserSession:
         headless: Optional[bool] = None,
         proxy: Optional[str] = None,
         user_agent: str = DEFAULT_UA,
+        nav_timeout: float = 20.0,
+        render_wait_ms: int = 2000,
         cf_cookie: Optional[str] = None,
     ):
         if headless is None:
@@ -100,8 +102,7 @@ class BrowserSession:
                 self._context.add_cookies([{
                     "name": "cf_clearance",
                     "value": self.cf_cookie,
-                    "domain": ".traffic.cv",
-                    "path": "/",
+                    "url": "https://traffic.cv",
                 }])
             except Exception:
                 pass
