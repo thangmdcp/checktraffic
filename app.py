@@ -1,7 +1,8 @@
-"""Web app check traffic hàng loạt từ traffic.cv — UI/UX Pro Max Data-Dense Dashboard."""
+"""Web app check traffic hàng loạt từ traffic.cv — UI/UX Pro Max Data-Dense Dashboard (No Sidebar, Top Header Logo, 3D Settings Popover, Professional Footer)."""
 
 from __future__ import annotations
 
+import base64
 import json
 import queue
 import threading
@@ -19,10 +20,18 @@ from trafficcv.runner import RunSettings, run_auto_batch, load_proxies
 from trafficcv.brand import load_serper_keys
 from trafficcv.excel import results_to_dataframe, results_to_xlsx_bytes, results_to_csv_bytes
 
-st.set_page_config(page_title="CheckTraffic Pro — Data Intelligence", page_icon="📈", layout="wide")
+st.set_page_config(
+    page_title="CheckTraffic Pro — Data Intelligence",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 # ---- Cấu hình lưu trữ cài đặt (settings.json) ----
 SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
+LOGO_FILE = Path(__file__).resolve().parent / "logo_b64.txt"
+
+LOGO_B64 = LOGO_FILE.read_text(encoding="utf-8").strip() if LOGO_FILE.exists() else ""
 
 
 def load_saved_settings() -> dict:
@@ -74,97 +83,10 @@ THEMES = {
     ),
 }
 
-# ================================ Sidebar ================================
-with st.sidebar:
-    st.markdown('<div style="font-size: 18px; font-weight: 800; color: #1E40AF; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span class="mi">tune</span> Cấu Hình Pro</div>', unsafe_allow_html=True)
-    
-    theme_index = 1 if saved_conf.get("theme") == "Tối" else 0
-    theme_name = st.radio("Giao diện", ["Sáng", "Tối"], index=theme_index, horizontal=True, key="theme")
-
-    speed_val = saved_conf.get("speed", "Vừa")
-    speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value=speed_val)
-    min_delay, max_delay = {"An toàn": (6.0, 12.0), "Vừa": (3.0, 8.0), "Nhanh": (1.5, 4.0)}[speed]
-
-    use_cache_val = saved_conf.get("use_cache", True)
-    use_cache = st.toggle("Dùng cache dữ liệu", value=use_cache_val)
-    
-    force_refresh_val = saved_conf.get("force_refresh", False)
-    force_refresh = st.toggle("⚡ Ép quét mới & Ghi đè", value=force_refresh_val, help="Bỏ qua cache, bắt buộc quét mới 100% và ghi đè dữ liệu mới lên Supabase.")
-    if force_refresh:
-        use_cache = False
-
-    ttl_days_val = int(saved_conf.get("ttl_days", 90))
-    ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, ttl_days_val, disabled=not use_cache)
-    
-    use_parallel_val = saved_conf.get("use_parallel", True)
-    use_parallel = st.toggle("Quét song song", value=use_parallel_val)
-    concurrency_val = int(saved_conf.get("concurrency", 3))
-    concurrency = st.slider("Số luồng Chromium", 1, 5, concurrency_val, disabled=not use_parallel) if use_parallel else 1
-
-    if st.button("🗑️ Xóa Bộ Nhớ Cache", use_container_width=True):
-        try:
-            from trafficcv.cache import Cache
-            c = Cache()
-            c.conn.execute("DELETE FROM traffic")
-            c.conn.commit()
-            c.close()
-            st.session_state["results"] = None
-            st.toast("Đã xóa sạch bộ nhớ cache!", icon="🧹")
-        except Exception:
-            pass
-
-    st.markdown('<div style="font-size: 13px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">🌐 Proxy & Serper Key</div>', unsafe_allow_html=True)
-    server_proxies = load_proxies()
-    proxy_val = saved_conf.get("proxy_input", "")
-    proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=proxy_val, height=70, key="proxy_input", placeholder="http://host:port")
-    custom_proxies = [ln.strip() for ln in proxy_text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-    proxies_list = custom_proxies or server_proxies
-    use_proxy = st.toggle(f"Dùng proxy ({len(proxies_list)} IP)", value=bool(proxies_list), disabled=not proxies_list)
-
-    server_serper_keys = load_serper_keys()
-    serper_val = saved_conf.get("serper_input", "")
-    serper_text = st.text_area("Serper API Key", value=serper_val, height=70, key="serper_input", placeholder="dán key serper.dev…")
-    custom_serper_keys = [k.strip() for k in serper_text.splitlines() if k.strip() and not k.strip().startswith("#")]
-    serper_keys = custom_serper_keys or server_serper_keys
-
-    st.markdown('<div style="font-size: 13px; font-weight: 700; margin-top: 16px; margin-bottom: 8px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Bộ Lọc Dữ Liệu</div>', unsafe_allow_html=True)
-    filter_on_val = saved_conf.get("filter_on", False)
-    filter_on = st.toggle("Bật bộ lọc traffic", value=filter_on_val)
-    
-    min_txt_val = saved_conf.get("min_txt", "5k")
-    min_txt = st.text_input("Traffic tối thiểu", value=min_txt_val, disabled=not filter_on, placeholder="vd 5k, 1M")
-    
-    max_txt_val = saved_conf.get("max_txt", "")
-    max_txt = st.text_input("Traffic tối đa", value=max_txt_val, disabled=not filter_on, placeholder="không giới hạn")
-    
-    keep_unknown_val = saved_conf.get("keep_unknown", False)
-    keep_unknown = st.toggle("Giữ web không có dữ liệu", value=keep_unknown_val, disabled=not filter_on)
-    
-    drop_no_site_val = saved_conf.get("drop_no_site", False)
-    drop_no_site = st.toggle("Bỏ brand không thấy web", value=drop_no_site_val, disabled=not filter_on)
-
-    current_conf = {
-        "theme": theme_name,
-        "speed": speed,
-        "use_cache": use_cache,
-        "force_refresh": force_refresh,
-        "ttl_days": int(ttl_days),
-        "use_parallel": use_parallel,
-        "concurrency": int(concurrency),
-        "proxy_input": proxy_text,
-        "serper_input": serper_text,
-        "filter_on": filter_on,
-        "min_txt": min_txt,
-        "max_txt": max_txt,
-        "keep_unknown": keep_unknown,
-        "drop_no_site": drop_no_site,
-    }
-    if current_conf != saved_conf:
-        save_settings(current_conf)
-
+theme_name = saved_conf.get("theme", "Sáng")
 T = THEMES[theme_name]
 
-# ============================ CSS (UI/UX Pro Max Data-Dense System) ============================
+# ============================ CSS (No Sidebar, 3D Settings & Clean Layout) ============================
 st.markdown(
     f"""
     <style>
@@ -184,24 +106,23 @@ st.markdown(
     html, body, .stApp, [class*="css"] {{ font-family:'Plus Jakarta Sans', sans-serif; }}
     .stApp {{ background:{T['bg']}; }}
     
+    /* Ẩn hoàn toàn Sidebar */
+    [data-testid="stSidebar"], [data-testid="stSidebarNav"], [data-testid="stExpandSidebarButton"] {{
+        display: none !important;
+    }}
+    
     /* Ẩn chrome cũ Streamlit */
     #MainMenu, footer, [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"],
     [data-testid="stDecoration"], [data-testid="stHeaderActionElements"] {{ display:none !important; }}
     header[data-testid="stHeader"] {{ background:transparent; }}
     
-    .block-container {{ padding-top:1rem; max-width:1320px; }}
+    .block-container {{ padding-top:1.2rem; max-width:1320px; }}
     
-    /* Typography UI/UX Pro Max */
+    /* Typography */
     .stApp, .stMarkdown, .stMarkdown p, p, label, span {{ color:{T['text']}; }}
     h1, h2, h3, h4, h5, h6,
     [data-testid="stWidgetLabel"] *, [data-testid="stWidgetLabel"] p {{ 
         color:{T['text']} !important; font-weight:600; letter-spacing: -0.2px; 
-    }}
-    
-    /* Sidebar */
-    section[data-testid="stSidebar"] {{ 
-        background:{T['sidebar']}; 
-        border-right:1px solid {T['border']}; 
     }}
     
     /* Inputs */
@@ -218,7 +139,7 @@ st.markdown(
     }}
     .stTextArea textarea {{ 
         font-family:'Fira Code', monospace; 
-        font-size:13px; 
+        font-size:13.5px; 
         line-height: 1.6;
     }}
     [data-baseweb="textarea"]:focus-within, [data-baseweb="input"]:focus-within {{ 
@@ -264,6 +185,18 @@ st.markdown(
         box-shadow:0 8px 20px -6px rgba(30, 64, 175, 0.5); margin:6px 0 14px; 
     }}
 
+    /* 3D Glassmorphic Settings Panel */
+    .settings-3d-card {{
+        background: {T['panel']};
+        border: 1px solid {T['border']};
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 20px 40px -15px rgba(30, 64, 175, 0.12);
+        backdrop-filter: blur(16px);
+        margin-top: 12px;
+        margin-bottom: 24px;
+    }}
+
     /* Buttons */
     .stButton>button, .stDownloadButton>button {{ 
         border-radius:12px; font-weight:700; font-size:14px;
@@ -295,46 +228,151 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ============================ Top Header Bar ============================
-c_head1, c_head2 = st.columns([4, 1], vertical_alignment="center")
+# ============================ Top Header Bar with Logo & Action Icons ============================
+c_head1, c_head2 = st.columns([3.5, 1.5], vertical_alignment="center")
 
 with c_head1:
+    logo_img_html = f'<img src="data:image/jpeg;base64,{LOGO_B64}" style="width:44px; height:44px; border-radius:12px; box-shadow:0 6px 18px rgba(30,64,175,0.25);" />' if LOGO_B64 else '<span class="mi" style="font-size:36px; color:#1E40AF;">show_chart</span>'
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom: 2px;">
-            <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.6px; color: {T['text']};">
-                CheckTraffic <span style="background: linear-gradient(135deg, #1E40AF, #3B82F6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Pro</span>
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom: 2px;">
+            {logo_img_html}
+            <div>
+                <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.6px; color: {T['text']}; display:flex; align-items:center; gap:8px;">
+                    CheckTraffic <span style="background: linear-gradient(135deg, #1E40AF, #3B82F6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Pro</span>
+                    <span style="background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25); padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                        <span style="width:6px; height:6px; border-radius:50%; background:#10B981;"></span> Hybrid Cloud
+                    </span>
+                </div>
+                <div style="font-size: 13px; color: {T['muted']};">
+                    Data-Dense Intelligence SaaS · Tự động phân tích Traffic từ traffic.cv
+                </div>
             </div>
-            <span style="background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25); padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
-                <span style="width:6px; height:6px; border-radius:50%; background:#10B981;"></span> Hybrid Cloud
-            </span>
-        </div>
-        <div style="font-size: 13px; color: {T['muted']}; margin-bottom: 14px;">
-            Data-Dense Intelligence SaaS · Tự động phân tích Traffic từ traffic.cv
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 with c_head2:
-    with st.popover("⚡ REST API", help="Tài liệu & Tích hợp API cho Developer", use_container_width=True):
-        st.markdown("### ⚡ CheckTraffic REST API")
-        st.markdown("**Base URL:** `https://checktraffic.vibevic.com`  \n"
-                    "**POST Check:** `/api/check`  \n"
-                    "**GET Cache:** `/api/cache`  \n"
-                    "**Swagger UI:** [/api/docs](/api/docs)")
-        st.code("""curl -X POST "https://checktraffic.vibevic.com/api/check" \\
+    ch_icon1, ch_icon2 = st.columns(2)
+    with ch_icon1:
+        with st.popover("⚡ REST API", help="Tài liệu & Tích hợp API cho Developer", use_container_width=True):
+            st.markdown("### ⚡ CheckTraffic REST API")
+            st.markdown("**Base URL:** `https://checktraffic.vibevic.com`  \n"
+                        "**POST Check:** `/api/check`  \n"
+                        "**GET Cache:** `/api/cache`  \n"
+                        "**Swagger UI:** [/api/docs](/api/docs)")
+            st.code("""curl -X POST "https://checktraffic.vibevic.com/api/check" \\
   -H "Content-Type: application/json" \\
   -d '{"inputs": ["shygems.com"], "use_cache": true}'""", language="bash")
-        guide_file = Path(__file__).parent / "CHECK_TRAFFIC_API.md"
-        if guide_file.exists():
-            st.download_button(
-                label="⬇️ Tải HD Tích Hợp AI (.md)",
-                data=guide_file.read_bytes(),
-                file_name="CHECK_TRAFFIC_API.md",
-                mime="text/markdown",
-                use_container_width=True
-            )
+            guide_file = Path(__file__).parent / "CHECK_TRAFFIC_API.md"
+            if guide_file.exists():
+                st.download_button(
+                    label="⬇️ Tải HD Tích Hợp AI (.md)",
+                    data=guide_file.read_bytes(),
+                    file_name="CHECK_TRAFFIC_API.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+
+    with ch_icon2:
+        with st.popover("⚙️ Cài đặt Pro", help="Cấu hình hệ thống, Proxy, Serper Key & Bộ lọc", use_container_width=True):
+            st.markdown("### ⚙️ Cấu Hình Hệ Thống (3D Pro)")
+            
+            p_theme = st.radio("Giao diện", ["Sáng", "Tối"], index=0 if saved_conf.get("theme") == "Sáng" else 1, horizontal=True, key="theme_input")
+            
+            p_speed_val = saved_conf.get("speed", "Vừa")
+            p_speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value=p_speed_val, key="speed_input")
+            
+            p_use_cache_val = saved_conf.get("use_cache", True)
+            p_use_cache = st.toggle("Dùng cache dữ liệu", value=p_use_cache_val, key="cache_toggle")
+            
+            p_force_refresh_val = saved_conf.get("force_refresh", False)
+            p_force_refresh = st.toggle("⚡ Ép quét mới & Ghi đè", value=p_force_refresh_val, help="Bỏ qua cache, quét mới 100% và ghi đè Supabase.", key="force_toggle")
+            if p_force_refresh:
+                p_use_cache = False
+
+            p_ttl_days = st.number_input("Thời hạn Cache (ngày)", 1, 365, int(saved_conf.get("ttl_days", 90)), disabled=not p_use_cache, key="ttl_input")
+            
+            p_use_parallel = st.toggle("Quét song song", value=saved_conf.get("use_parallel", True), key="parallel_toggle")
+            p_concurrency = st.slider("Số luồng Chromium", 1, 5, int(saved_conf.get("concurrency", 3)), disabled=not p_use_parallel, key="concurrency_input") if p_use_parallel else 1
+
+            if st.button("🗑️ Xóa Bộ Nhớ Cache", use_container_width=True, key="clear_cache_btn"):
+                try:
+                    from trafficcv.cache import Cache
+                    c = Cache()
+                    c.conn.execute("DELETE FROM traffic")
+                    c.conn.commit()
+                    c.close()
+                    st.session_state["results"] = None
+                    st.toast("Đã xóa sạch bộ nhớ cache!", icon="🧹")
+                except Exception:
+                    pass
+
+            st.divider()
+            st.markdown("**🌐 Proxy & Serper Key**")
+            p_proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=saved_conf.get("proxy_input", ""), height=65, key="proxy_input", placeholder="http://host:port")
+            
+            server_serper_keys = load_serper_keys()
+            p_serper_text = st.text_area("Serper API Key", value=saved_conf.get("serper_input", ""), height=65, key="serper_input", placeholder="dán key serper.dev…")
+            st.caption(f":material/key: Đã tải sẵn {len(server_serper_keys)} Serper Key mặc định trên Server")
+
+            st.divider()
+            st.markdown("**⚡ Bộ Lọc Dữ Liệu**")
+            p_filter_on = st.toggle("Bật bộ lọc traffic", value=saved_conf.get("filter_on", False), key="filter_toggle")
+            p_min_txt = st.text_input("Traffic tối thiểu", value=saved_conf.get("min_txt", "5k"), disabled=not p_filter_on, key="min_input")
+            p_max_txt = st.text_input("Traffic tối đa", value=saved_conf.get("max_txt", ""), disabled=not p_filter_on, key="max_input")
+            p_keep_unknown = st.toggle("Giữ web không có dữ liệu", value=saved_conf.get("keep_unknown", False), disabled=not p_filter_on, key="keep_unk_toggle")
+            p_drop_no_site = st.toggle("Bỏ brand không thấy web", value=saved_conf.get("drop_no_site", False), disabled=not p_filter_on, key="drop_no_site_toggle")
+
+            # Lưu cấu hình tự động
+            current_conf = {
+                "theme": p_theme,
+                "speed": p_speed,
+                "use_cache": p_use_cache,
+                "force_refresh": p_force_refresh,
+                "ttl_days": int(p_ttl_days),
+                "use_parallel": p_use_parallel,
+                "concurrency": int(p_concurrency),
+                "proxy_input": p_proxy_text,
+                "serper_input": p_serper_text,
+                "filter_on": p_filter_on,
+                "min_txt": p_min_txt,
+                "max_txt": p_max_txt,
+                "keep_unknown": p_keep_unknown,
+                "drop_no_site": p_drop_no_site,
+            }
+            if current_conf != saved_conf:
+                save_settings(current_conf)
+
+# Bind variables from saved config / popover inputs
+speed = saved_conf.get("speed", "Vừa")
+min_delay, max_delay = {"An toàn": (6.0, 12.0), "Vừa": (3.0, 8.0), "Nhanh": (1.5, 4.0)}[speed]
+use_cache = saved_conf.get("use_cache", True)
+force_refresh = saved_conf.get("force_refresh", False)
+if force_refresh:
+    use_cache = False
+ttl_days = saved_conf.get("ttl_days", 90)
+use_parallel = saved_conf.get("use_parallel", True)
+concurrency = saved_conf.get("concurrency", 3) if use_parallel else 1
+
+server_proxies = load_proxies()
+proxy_text = saved_conf.get("proxy_input", "")
+custom_proxies = [ln.strip() for ln in proxy_text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+proxies_list = custom_proxies or server_proxies
+use_proxy = bool(proxies_list)
+
+server_serper_keys = load_serper_keys()
+serper_text = saved_conf.get("serper_input", "")
+custom_serper_keys = [k.strip() for k in serper_text.splitlines() if k.strip() and not k.strip().startswith("#")]
+serper_keys = custom_serper_keys or server_serper_keys
+
+filter_on = saved_conf.get("filter_on", False)
+min_txt = saved_conf.get("min_txt", "5k")
+max_txt = saved_conf.get("max_txt", "")
+keep_unknown = saved_conf.get("keep_unknown", False)
+drop_no_site = saved_conf.get("drop_no_site", False)
+
 
 # =========================== Input Section ===========================
 st.text_area("Danh sách website hoặc tên brand", key="domains_input", height=140,
@@ -650,3 +688,26 @@ if st.session_state.get("results"):
     dl2.download_button(":material/download: Tải CSV", data=results_to_csv_bytes(results),
                         file_name="traffic_results.csv", mime="text/csv",
                         use_container_width=True)
+
+
+# ============================ Footer ============================
+st.markdown(
+    f"""
+    <div style="margin-top: 60px; padding: 24px 0 12px; border-top: 1px solid {T['border']}; font-size: 12.5px; color: {T['muted']}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; color: {T['text']};">CheckTraffic Pro</span> © 2026 Vibevic Technology Inc. All rights reserved.
+        </div>
+        <div style="display: flex; gap: 14px; font-weight: 500;">
+            <a href="/api/docs" target="_blank" style="color: {PRIMARY}; text-decoration: none; font-weight: 600;">Swagger API Docs</a>
+            <span>·</span>
+            <span>Serper API ({len(server_serper_keys)} Keys Mặc định)</span>
+            <span>·</span>
+            <span>Version 1.2.0 Pro</span>
+        </div>
+        <div>
+            Powered by <b style="color: {T['text']};">Playwright</b> & <b style="color: {PRIMARY};">Supabase Hybrid Cloud</b>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
