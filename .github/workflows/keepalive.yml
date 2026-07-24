@@ -1,0 +1,23 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Chạy tự động mỗi 3 ngày lúc 00:00 UTC (đảm bảo Supabase không bao giờ bị pause)
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Cho phép bấm chạy thủ công từ GitHub Actions tab
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://kwwrzoouitcknzwlcttc.supabase.co/rest/v1/traffic_cache?select=domain&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d3J6b291aXRja256d2xjdHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTI2MzAsImV4cCI6MjA5ODMyODYzMH0.N6O0_RcA_OzyPDQOOqmDRkm0nIRa_uwZK9L59mXswDw" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d3J6b291aXRja256d2xjdHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTI2MzAsImV4cCI6MjA5ODMyODYzMH0.N6O0_RcA_OzyPDQOOqmDRkm0nIRa_uwZK9L59mXswDw")
+          echo "Supabase HTTP Status: $response"
+          if [ "$response" -eq 200 ] || [ "$response" -eq 206 ]; then
+            echo "✅ Supabase pinged successfully! Project is kept alive 24/7."
+          else
+            echo "⚠️ Ping warning (Status $response), but request was sent."
+          fi
