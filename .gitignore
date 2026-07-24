@@ -13,3 +13,5 @@ __pycache__/
 venv/
 CheckTraffic.app/
 settings.json
+.agents/
+.claude/
