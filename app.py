@@ -751,13 +751,6 @@ if st.session_state.get("results"):
     all_proj_options = ["🌐 Tất cả web đã check"] + project_names
     c_mgr.close()
 
-    # Project selection logic
-    c_mgr = Cache()
-    saved_projects = c_mgr.get_projects()
-    project_names = [p["name"] for p in saved_projects]
-    all_proj_options = ["🌐 Tất cả web đã check"] + project_names
-    c_mgr.close()
-
     # --- Unified Compact Header Bar Above Table ---
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
     ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([2.5, 0.7, 0.7, 0.7, 3.4, 1.0, 1.0], vertical_alignment="center")
@@ -832,12 +825,6 @@ if st.session_state.get("results"):
 
     with ch5:
         search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Gõ tên website hoặc brand để tìm nhanh...", key="table_search_input", label_visibility="collapsed")
-    
-    with ch6:
-        st.download_button("📊 Excel", data=results_to_xlsx_bytes(results), file_name="traffic_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-    
-    with ch7:
-        st.download_button("📄 CSV", data=results_to_csv_bytes(results), file_name="traffic_results.csv", mime="text/csv", use_container_width=True)
 
     # Handle project selection or refresh click
     if btn_refresh_project:
@@ -891,6 +878,12 @@ if st.session_state.get("results"):
             or q in (r.monthly_visits_raw or "").lower()
             or q in (r.status or "").lower()
         ]
+
+    with ch6:
+        st.download_button("📊 Excel", data=results_to_xlsx_bytes(filtered_results), file_name="traffic_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    
+    with ch7:
+        st.download_button("📄 CSV", data=results_to_csv_bytes(filtered_results), file_name="traffic_results.csv", mime="text/csv", use_container_width=True)
         
     is_filtered = len(filtered_results) < len(results) or search_kw.strip() or st.session_state.get("row_flt_on")
     if is_filtered:

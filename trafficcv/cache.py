@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import sqlite3
 import time
 from pathlib import Path
@@ -12,14 +13,29 @@ import json
 import httpx
 from .scraper import TrafficResult
 
+logger = logging.getLogger(__name__)
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    # Vẫn chạy được với biến môi trường hệ thống; requirements.txt có python-dotenv.
+    pass
+
 DEFAULT_DB = os.getenv(
     "TRAFFICCV_CACHE_DB",
     str(Path(__file__).resolve().parent.parent / "cache.db"),
 )
 DEFAULT_TTL = 3650 * 24 * 3600  # 10 năm (vô thời hạn trừ khi force_refresh)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kwwrzoouitcknzwlcttc.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d3J6b291aXRja256d2xjdHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTI2MzAsImV4cCI6MjA5ODMyODYzMH0.N6O0_RcA_OzyPDQOOqmDRkm0nIRa_uwZK9L59mXswDw")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kwwrzoouitcknzwlcttc.supabase.co").rstrip("/")
+# Máy local nên dùng service-role key để ghi. Giữ SUPABASE_KEY làm fallback
+# tương thích với cấu hình cũ; website ngoài chỉ được dùng anon key để đọc.
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv(
+    "SUPABASE_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d3J6b291aXRja256d2xjdHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTI2MzAsImV4cCI6MjA5ODMyODYzMH0.N6O0_RcA_OzyPDQOOqmDRkm0nIRa_uwZK9L59mXswDw",
+)
 
 # Các cột dữ liệu (khớp tên field của TrafficResult), không gồm domain/status/fetched_at.
 _FIELDS = ("monthly_visits", "monthly_visits_raw", "change", "trend",
@@ -67,8 +83,18 @@ class Cache:
             )
             """
         )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS brand_site (
+                brand TEXT PRIMARY KEY,
+                domain TEXT,
+                fetched_at REAL
+            )
+            """
+        )
         self._migrate()
         self.conn.commit()
+        self.last_cloud_error: Optional[str] = None
 
         self.sb_headers = {
             "apikey": SUPABASE_KEY,
@@ -76,6 +102,40 @@ class Cache:
             "Content-Type": "application/json",
             "Prefer": "resolution=merge-duplicates",
         } if SUPABASE_URL and SUPABASE_KEY else None
+
+    def _cloud_request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """Gọi Supabase và không nuốt lỗi HTTP như implementation cũ."""
+        if not self.sb_headers:
+            raise RuntimeError("Chưa cấu hình SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY")
+        try:
+            response = httpx.request(
+                method,
+                f"{SUPABASE_URL}/rest/v1/{path.lstrip('/')}",
+                headers=self.sb_headers,
+                timeout=kwargs.pop("timeout", 8.0),
+                **kwargs,
+            )
+            response.raise_for_status()
+            self.last_cloud_error = None
+            return response
+        except (httpx.HTTPError, ValueError) as exc:
+            self.last_cloud_error = str(exc)
+            logger.warning("Supabase sync failed: %s", exc)
+            raise
+
+    def cloud_health(self) -> dict:
+        """Kiểm tra kết nối cloud, dùng cho chẩn đoán UI/API."""
+        if not self.sb_headers:
+            return {"configured": False, "ok": False, "error": "missing_config"}
+        try:
+            self._cloud_request(
+                "GET",
+                "traffic_cache",
+                params={"select": "domain", "limit": "1"},
+            )
+            return {"configured": True, "ok": True, "error": None}
+        except Exception as exc:
+            return {"configured": True, "ok": False, "error": str(exc)}
 
     # ----- cache brand -> domain -----
     def get_brand(self, brand: str) -> Optional[str]:
@@ -125,11 +185,10 @@ class Cache:
         # Đẩy lên Supabase Cloud
         if self.sb_headers:
             try:
-                url = f"{SUPABASE_URL}/rest/v1/brand_site_cache"
                 payload = {"brand": brand_clean, "domain": domain, "fetched_at": ts}
-                httpx.post(url, headers=self.sb_headers, json=payload, timeout=3.0)
-            except Exception:
-                pass
+                self._cloud_request("POST", "brand_site_cache", json=payload)
+            except Exception as exc:
+                logger.warning("Đã lưu brand local nhưng chưa đồng bộ Supabase: %s", exc)
 
     def _migrate(self) -> None:
         """Thêm cột còn thiếu cho cache.db cũ (giữ nguyên dữ liệu đã có)."""
@@ -295,7 +354,6 @@ class Cache:
         # Đồng bộ lên Supabase Cloud
         if self.sb_headers:
             try:
-                url = f"{SUPABASE_URL}/rest/v1/traffic_cache"
                 payload = {
                     "domain": result.domain,
                     "monthly_visits": result.monthly_visits,
@@ -311,9 +369,61 @@ class Cache:
                     "status": result.status,
                     "fetched_at": ts,
                 }
-                httpx.post(url, headers=self.sb_headers, json=payload, timeout=3.0)
-            except Exception:
-                pass
+                self._cloud_request("POST", "traffic_cache", json=payload)
+            except Exception as exc:
+                logger.warning(
+                    "Đã lưu %s vào SQLite nhưng chưa đồng bộ Supabase: %s",
+                    result.domain,
+                    exc,
+                )
+
+    def sync_local_to_cloud(self, batch_size: int = 200) -> dict:
+        """Đẩy toàn bộ cache SQLite hợp lệ lên Supabase theo lô.
+
+        Dùng khi mới bật RLS/service-role hoặc khi local có dữ liệu từ trước.
+        Record lỗi như ``TRAFFIC``/``N/A`` không được đồng bộ.
+        """
+        cols = ", ".join(_FIELDS)
+        rows = self.conn.execute(
+            f"""
+            SELECT domain, {cols}, status, fetched_at
+            FROM traffic
+            WHERE status = 'ok'
+              AND monthly_visits_raw IS NOT NULL
+              AND monthly_visits_raw NOT IN ('N/A', 'TRAFFIC', '')
+            ORDER BY fetched_at
+            """
+        ).fetchall()
+
+        synced = 0
+        for start in range(0, len(rows), max(1, batch_size)):
+            payload = []
+            for row in rows[start:start + batch_size]:
+                domain, *vals, status, fetched_at = row
+                item = {
+                    "domain": domain,
+                    **dict(zip(_FIELDS, vals)),
+                    "status": status,
+                    "fetched_at": fetched_at,
+                }
+                for field in ("top_regions", "top_keywords"):
+                    value = item.get(field)
+                    if isinstance(value, str):
+                        try:
+                            item[field] = json.loads(value)
+                        except (TypeError, ValueError):
+                            item[field] = None
+                payload.append(item)
+
+            self._cloud_request(
+                "POST",
+                "traffic_cache",
+                json=payload,
+                timeout=30.0,
+            )
+            synced += len(payload)
+
+        return {"total": len(rows), "synced": synced}
 
     def save_project(self, name: str, domains: list[str]) -> float:
         """Lưu danh sách dự án với danh sách tên miền và trả về thời gian cập nhật."""

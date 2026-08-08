@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from trafficcv.cache import Cache
 from trafficcv.runner import run_auto_batch, RunSettings, load_proxies
 from trafficcv.brand import load_serper_keys
-from trafficcv.scraper import TrafficResult
+from trafficcv.scraper import TrafficResult, normalize_domain
 
 api_app = FastAPI(
     title="CheckTraffic REST API",
@@ -79,13 +79,17 @@ def health_check():
 
 @api_app.get("/cache", summary="Tra cứu dữ liệu nhanh từ Cache")
 def get_cached_domain(domain: str = Query(..., description="Root domain (ví dụ: google.com) cần tra cứu trong cache")):
+    normalized = normalize_domain(domain)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="URL/domain không hợp lệ.")
     cache = Cache()
-    res = cache.get(domain)
+    res = cache.get(normalized)
+    cache.close()
     if not res:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy dữ liệu cache cho domain '{domain}'")
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy dữ liệu cache cho domain '{normalized}'")
     return {
         "status": "success",
-        "domain": domain,
+        "domain": normalized,
         "data": {
             "domain": res.domain,
             "total_visits": res.monthly_visits_raw,

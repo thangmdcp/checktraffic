@@ -31,6 +31,46 @@ streamlit run app.py
 3. Bấm **🚀 Bắt đầu check** → app quét theo lô 10, hiện tiến trình + bảng kết quả.
 4. Bấm **⬇️ Tải file Excel**.
 
+## Chạy local, lưu Supabase, website ngoài chỉ đọc
+
+Đây là kiến trúc khuyến nghị: Streamlit + Playwright chỉ chạy trên máy local.
+Mỗi kết quả thành công được lưu vào SQLite local và đồng bộ lên Supabase.
+Website bên ngoài không gọi máy local; nó tra trực tiếp bảng `traffic_cache` trên
+Supabase nên vẫn lấy được dữ liệu khi máy local đã tắt.
+
+1. Chạy [`supabase_schema.sql`](supabase_schema.sql) trong Supabase SQL Editor.
+2. Thêm vào `.env`:
+
+   ```dotenv
+   SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+   ```
+
+3. Chỉ đặt `SUPABASE_ANON_KEY` ở website ngoài. Tuyệt đối không đưa service-role
+   key lên frontend.
+
+Ví dụ website nhận cả URL đầy đủ rồi tra root domain:
+
+```js
+const host = new URL(
+  input.match(/^https?:\/\//) ? input : `https://${input}`
+).hostname.replace(/^www\./, "");
+
+const response = await fetch(
+  `${SUPABASE_URL}/rest/v1/traffic_cache` +
+  `?domain=eq.${encodeURIComponent(host)}&status=eq.ok&select=*`,
+  { headers: { apikey: SUPABASE_ANON_KEY } }
+);
+const [traffic] = await response.json();
+```
+
+Lưu ý: website chỉ lấy được dữ liệu đã được app local quét và đồng bộ trước đó.
+Muốn URL mới tự được cào ngay khi người dùng dán vào thì phải có một worker/server
+online; trình duyệt bên ngoài không thể đánh thức tiến trình chỉ chạy local.
+
+Hướng dẫn frontend đầy đủ, gồm cấu hình anon key, hàm chuẩn hóa URL, truy vấn
+Supabase và form HTML mẫu: [`WEB_INTEGRATION_GUIDE.md`](WEB_INTEGRATION_GUIDE.md).
+
 ### Thiết lập (thanh bên)
 - **Tốc độ quét**: thời gian nghỉ giữa các lô 10 web (chậm hơn = lịch sự hơn).
 - **Cache**: web đã check gần đây lấy lại từ `cache.db`, không gọi lại traffic.cv.
