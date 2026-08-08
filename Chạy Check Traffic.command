@@ -21,10 +21,11 @@ if [ ! -d ".venv" ] || ! ".venv/bin/python" -c "import streamlit, st_aggrid" 2>/
 fi
 
 # 2) Chạy app (Streamlit sẽ tự mở trình duyệt)
+kill -9 $(lsof -t -iTCP:8501 -sTCP:LISTEN) 2>/dev/null || true
 echo "🚀 Đang khởi động... trình duyệt sẽ tự mở tại http://localhost:8501"
 echo "   (Đóng cửa sổ Terminal này để tắt app.)"
 echo
-".venv/bin/streamlit" run app.py
+".venv/bin/streamlit" run app.py --server.port=8501
 
 # Giữ cửa sổ mở nếu có lỗi
 echo
