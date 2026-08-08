@@ -527,67 +527,23 @@ def _table_html(df: pd.DataFrame) -> str:
 
 def _render_grid(df: pd.DataFrame, key: str = "grid"):
     df_clean = df.fillna("")
-    try:
-        gb = GridOptionsBuilder.from_dataframe(df_clean)
-        gb.configure_default_column(sortable=True, filter=True, resizable=True)
-
-        def col(field, name, width=None, flex=None, cell_style=None, pinned=None):
-            kw = {"headerName": name}
-            if width: kw["width"] = width
-            if flex: kw["flex"] = flex
-            if cell_style: kw["cellStyle"] = cell_style
-            if pinned: kw["pinned"] = pinned
-            gb.configure_column(field, **kw)
-
-        col("Website", "Website", flex=1.2, pinned="left")
-        col("Lượt truy cập/tháng", "Lượt truy cập/tháng", width=140)
-        col("Xu hướng", "Xu hướng", width=110,
-            cell_style=JsCode(f"params => params.value === 'Tăng' ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : (params.value === 'Giảm' ? {{'color': '{DANGER}', 'fontWeight': '700'}} : null)"))
-        col("Thay đổi", "Thay đổi", width=110,
-            cell_style=JsCode(f"params => typeof params.value === 'string' && params.value.startsWith('+') ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : (typeof params.value === 'string' && params.value.startsWith('-') ? {{'color': '{DANGER}', 'fontWeight': '700'}} : null)"))
-        col("Trang/lượt", "Trang/lượt", width=105)
-        col("Thời lượng TB", "Thời lượng TB", width=110)
-        col("Tỷ lệ thoát", "Tỷ lệ thoát", width=110)
-        col("Ngày đăng ký", "Ngày đăng ký", width=120)
-        col("Trạng thái", "Trạng thái", width=110,
-            cell_style=JsCode(f"params => params.value === 'ok' ? {{'color': '{SUCCESS}', 'fontWeight': '700'}} : {{'color': '{DANGER}', 'fontWeight': '700'}}"))
-
-        if len(df_clean) > 50:
-            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=100)
-
-        bgf = T['tablebg']
-        css = {
-            ".ag-root-wrapper": {"border-radius": "12px", "border": f"1px solid {T['tableborder']}",
-                                 "background-color": bgf},
-            ".ag-header": {"background-image": f"linear-gradient(120deg,{PRIMARY},{SECONDARY})",
-                           "border-bottom": "none"},
-            ".ag-header-cell-label": {"color": "#ffffff", "font-weight": "700", "font-size": "12.5px"},
-            ".ag-header-cell-text": {"white-space": "nowrap", "overflow": "hidden", "text-overflow": "ellipsis"},
-            ".ag-header-cell": {"border": "none"},
-            ".ag-body-viewport, .ag-center-cols-viewport, .ag-center-cols-clipper, .ag-body, .ag-body-viewport-wrapper": {"background-color": bgf},
-            ".ag-row": {"background-color": bgf, "border-color": f"{T['tableborder']} !important"},
-            ".ag-row.ag-row-odd": {"background-color": f"{T['tableodd']} !important"},
-            ".ag-row.ag-row-hover": {"background-color": f"{T['tablehover']} !important"},
-            ".ag-cell, .ag-cell-value": {"color": T['text']},
-            ".ag-theme-alpine": {
-                "--ag-background-color": T['tablebg'],
-                "--ag-odd-row-background-color": T['tableodd'],
-                "--ag-foreground-color": T['text'],
-                "--ag-data-color": T['text'],
-                "--ag-secondary-foreground-color": T['muted'],
-                "--ag-border-color": T['tableborder'],
-                "--ag-row-hover-color": T['tablehover'],
-                "--ag-font-family": "'Plus Jakarta Sans', sans-serif",
-                "--ag-font-size": "12.5px",
-                "--ag-header-height": "42px",
-                "--ag-row-height": "40px",
-            },
+    st.dataframe(
+        df_clean,
+        use_container_width=True,
+        height=520,
+        hide_index=True,
+        column_config={
+            "Website": st.column_config.TextColumn("Website", width="medium"),
+            "Lượt truy cập/tháng": st.column_config.TextColumn("Lượt truy cập/tháng", width="small"),
+            "Xu hướng": st.column_config.TextColumn("Xu hướng", width="small"),
+            "Thay đổi": st.column_config.TextColumn("Thay đổi", width="small"),
+            "Trang/lượt": st.column_config.TextColumn("Trang/lượt", width="small"),
+            "Thời lượng TB": st.column_config.TextColumn("Thời lượng TB", width="small"),
+            "Tỷ lệ thoát": st.column_config.TextColumn("Tỷ lệ thoát", width="small"),
+            "Ngày đăng ký": st.column_config.TextColumn("Ngày đăng ký", width="small"),
+            "Trạng thái": st.column_config.TextColumn("Trạng thái", width="small"),
         }
-        AgGrid(df_clean, gridOptions=gb.build(), theme="alpine", custom_css=css,
-               allow_unsafe_jscode=True, height=520, update_mode=GridUpdateMode.NO_UPDATE,
-               key=key)
-    except Exception:
-        st.dataframe(df_clean, use_container_width=True, height=520)
+    )
 
 
 def _dark(chart):
