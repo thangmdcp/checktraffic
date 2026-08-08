@@ -7,10 +7,11 @@ echo "================================================"
 echo "   📊  Check Traffic hàng loạt - traffic.cv"
 echo "================================================"
 
-# 1) Tạo môi trường ảo + cài đặt nếu chưa có
-if [ ! -x ".venv/bin/streamlit" ]; then
-  echo "⏳ Lần đầu chạy: đang cài đặt thư viện (có thể mất vài phút)..."
-  if [ ! -d ".venv" ]; then
+# 1) Tạo môi trường ảo + cài đặt nếu chưa có hoặc chưa đủ thư viện
+if [ ! -d ".venv" ] || ! ".venv/bin/python" -c "import streamlit, st_aggrid" 2>/dev/null; then
+  echo "⏳ Đang kiểm tra & cập nhật thư viện môi trường ảo (có thể mất ít phút)..."
+  if [ ! -d ".venv" ] || ! ".venv/bin/python" --version 2>/dev/null; then
+    rm -rf .venv
     python3 -m venv .venv || { echo "❌ Không tạo được môi trường. Cần cài Python 3."; read -r; exit 1; }
   fi
   ".venv/bin/pip" install --quiet --upgrade pip
