@@ -25,6 +25,7 @@ kill -9 $(lsof -t -iTCP:8501 -sTCP:LISTEN) 2>/dev/null || true
 echo "🚀 Đang khởi động... trình duyệt sẽ tự mở tại http://localhost:8501"
 echo "   (Đóng cửa sổ Terminal này để tắt app.)"
 echo
+(sleep 1.5 && open "http://localhost:8501") &
 ".venv/bin/streamlit" run app.py --server.port=8501
 
 # Giữ cửa sổ mở nếu có lỗi
