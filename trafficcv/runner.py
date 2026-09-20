@@ -152,13 +152,19 @@ def run_batch(
         # 1) Lấy trước từ cache (sử dụng bulk query siêu tốc).
         to_fetch: list[str] = []
         cached_map = cache.get_many(domains, cloud_progress_cb=cache_progress_cb) if settings.use_cache else {}
+        cached_items: list[TrafficResult] = []
         for d in domains:
             cached = cached_map.get(d)
             if cached is not None:
                 outcome.from_cache += 1
                 emit(cached)
+                cached_items.append(cached)
             else:
                 to_fetch.append(d)
+
+        if cached_items and batch_cb:
+            for chk in chunked(cached_items, 1000):
+                batch_cb(0, len(to_fetch), chk)
 
         if resume_cb:
             resume_cb(outcome.from_cache, len(to_fetch))
