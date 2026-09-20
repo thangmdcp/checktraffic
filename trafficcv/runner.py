@@ -23,7 +23,7 @@ from dataclasses import replace
 
 import httpx
 
-from .browser import BrowserSession, BULK_MAX
+from .browser import BrowserSession, BULK_MAX, parse_proxy_list
 from .cache import Cache
 from .scraper import (TrafficResult, get_traffic_bulk, normalize_list, normalize_domain,
                       parse_brand_list, parse_domain_details, looks_like_domain, chunked)
@@ -33,6 +33,9 @@ ProgressCb = Callable[[int, int, TrafficResult], None]
 # resolve_cb(done, total, brand, domain_or_None)
 ResolveCb = Callable[[int, int, str, Optional[str]], None]
 BatchCb = Callable[[int, int, list], None]  # (batch_done, batch_total, batch_results)
+CacheProgressCb = Callable[[int, int], None]
+ResumeCb = Callable[[int, int], None]
+RunStateCb = Callable[[str, int, float], None]
 
 DEFAULT_PROXIES_FILE = str(Path(__file__).resolve().parent.parent / "proxies.txt")
 
@@ -42,17 +45,15 @@ def load_proxies(path: str = DEFAULT_PROXIES_FILE) -> list[str]:
 
     Nếu không có file thì thử biến môi trường TRAFFICCV_PROXY (một proxy).
     """
-    proxies: list[str] = []
+    raw_text = ""
     p = Path(path)
     if p.exists():
-        for line in p.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#"):
-                proxies.append(line)
+        raw_text = p.read_text(encoding="utf-8")
+    proxies, _ = parse_proxy_list(raw_text)
     if not proxies:
         env = os.getenv("TRAFFICCV_PROXY")
         if env:
-            proxies.append(env)
+            proxies, _ = parse_proxy_list(env)
     return proxies
 
 
@@ -69,6 +70,7 @@ class RunSettings:
     backoff_after: int = 2                # số lô-bị-chặn liên tiếp trước khi nghỉ dài
     cooldown: float = 90.0                # thời gian nghỉ dài khi nghi bị chặn (giây)
     concurrency: int = 1                  # số luồng quét song song (1 = tuần tự)
+    max_batch_retries: int = 2            # tự thử lại khi browser/mạng lỗi
 
 
 @dataclass
@@ -90,6 +92,18 @@ def _is_bad_batch(results: list[TrafficResult]) -> bool:
     return all(r.status == "error" for r in results)
 
 
+def _wait_or_stop(seconds: float, should_stop: Optional[Callable[[], bool]]) -> bool:
+    """Chờ nhưng kiểm tra yêu cầu dừng thường xuyên. True nếu cần dừng."""
+    deadline = time.monotonic() + max(0.0, seconds)
+    while True:
+        if should_stop and should_stop():
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.25, remaining))
+
+
 def run_batch(
     domains_or_text,
     settings: Optional[RunSettings] = None,
@@ -97,6 +111,9 @@ def run_batch(
     batch_cb: Optional[BatchCb] = None,
     should_stop: Optional[Callable[[], bool]] = None,
     seed: Optional[int] = None,
+    cache_progress_cb: Optional[CacheProgressCb] = None,
+    resume_cb: Optional[ResumeCb] = None,
+    run_state_cb: Optional[RunStateCb] = None,
 ) -> BatchOutcome:
     settings = settings or RunSettings()
     rng = random.Random(seed)
@@ -134,7 +151,7 @@ def run_batch(
     try:
         # 1) Lấy trước từ cache (sử dụng bulk query siêu tốc).
         to_fetch: list[str] = []
-        cached_map = cache.get_many(domains) if settings.use_cache else {}
+        cached_map = cache.get_many(domains, cloud_progress_cb=cache_progress_cb) if settings.use_cache else {}
         for d in domains:
             cached = cached_map.get(d)
             if cached is not None:
@@ -142,6 +159,9 @@ def run_batch(
                 emit(cached)
             else:
                 to_fetch.append(d)
+
+        if resume_cb:
+            resume_cb(outcome.from_cache, len(to_fetch))
 
         if not to_fetch:
             return outcome
@@ -151,7 +171,7 @@ def run_batch(
         proxy_idx = 0
         consecutive_bad = 0
 
-        if settings.concurrency > 1:
+        if settings.concurrency > 1 or proxies:
             import threading
             from concurrent.futures import ThreadPoolExecutor
 
@@ -165,48 +185,165 @@ def run_batch(
                     if progress_cb:
                         progress_cb(done, total, res)
 
-            def worker(chunk_idx: int, chunk: list[str]):
-                if should_stop and should_stop():
-                    return
-                t_cache = Cache(ttl=settings.ttl)
-                proxy = proxies[chunk_idx % len(proxies)] if proxies else None
-                t_session = BrowserSession(headless=settings.headless, proxy=proxy, cf_cookie=settings.cf_cookie)
+            # Không cho hai Chromium dùng chung một proxy cùng lúc. Nếu proxy ít
+            # hơn số luồng được chọn thì tự hạ số worker về số proxy.
+            worker_limit = len(proxies) if proxies else settings.concurrency
+            worker_count = min(settings.concurrency, worker_limit, len(batches))
+            indexed_batches = list(enumerate(batches))
+            assignments = [indexed_batches[i::worker_count] for i in range(worker_count)]
+
+            def worker(worker_idx: int, assigned_batches: list[tuple[int, list[str]]]):
+                t_session: Optional[BrowserSession] = None
+                current_worker_proxy = object()
+                processed_with_session = 0
+                consecutive_worker_bad = 0
+                proxy_slot = worker_idx
+                worker_rng = random.Random((seed if seed is not None else time.time_ns()) + worker_idx)
+
+                def close_worker_session():
+                    nonlocal t_session, processed_with_session
+                    if t_session is not None:
+                        try:
+                            t_session.__exit__(None, None, None)
+                        except Exception:
+                            pass
+                    t_session = None
+                    processed_with_session = 0
+
                 try:
-                    with t_session:
-                        results_map = get_traffic_bulk(t_session, chunk)
-                        batch_results = [
-                            results_map.get(d, TrafficResult(d, status="error", error="Thiếu kết quả"))
-                            for d in chunk
-                        ]
+                    for position, (chunk_idx, chunk) in enumerate(assigned_batches):
+                        if should_stop and should_stop():
+                            with emit_lock:
+                                outcome.cancelled = True
+                            break
+
+                        proxy = proxies[proxy_slot % len(proxies)] if proxies else None
+                        need_new = (
+                            t_session is None
+                            or proxy != current_worker_proxy
+                            or (settings.restart_every and processed_with_session >= settings.restart_every)
+                        )
+                        last_error = None
+                        batch_results = []
+                        stopped_during_retry = False
+                        attempted_direct_fallback = False
+                        for attempt in range(max(0, settings.max_batch_retries) + 1):
+                            try:
+                                if need_new or t_session is None:
+                                    close_worker_session()
+                                    t_session = BrowserSession(
+                                        headless=settings.headless,
+                                        proxy=proxy,
+                                        cf_cookie=settings.cf_cookie,
+                                    )
+                                    t_session.__enter__()
+                                    current_worker_proxy = proxy
+                                    need_new = False
+                                results_map = get_traffic_bulk(t_session, chunk)
+                                batch_results = [
+                                    results_map.get(d, TrafficResult(d, status="error", error="Thiếu kết quả"))
+                                    for d in chunk
+                                ]
+                                processed_with_session += 1
+                                if not _is_bad_batch(batch_results) or attempt >= settings.max_batch_retries:
+                                    break
+                                close_worker_session()
+                            except Exception as b_err:
+                                last_error = b_err
+                                close_worker_session()
+                                if proxy and not attempted_direct_fallback:
+                                    proxy = None
+                                    attempted_direct_fallback = True
+                                    need_new = True
+
+                            if should_stop and should_stop():
+                                with emit_lock:
+                                    outcome.cancelled = True
+                                stopped_during_retry = True
+                                break
+                            if attempt < settings.max_batch_retries:
+                                if proxies and len(proxies) > worker_count and not attempted_direct_fallback:
+                                    proxy_slot = (proxy_slot + worker_count) % len(proxies)
+                                    proxy = proxies[proxy_slot]
+                                retry_wait = min(2 ** attempt, 4)
+                                if run_state_cb:
+                                    run_state_cb("retry", worker_idx + 1, retry_wait)
+                                if _wait_or_stop(retry_wait, should_stop):
+                                    with emit_lock:
+                                        outcome.cancelled = True
+                                    stopped_during_retry = True
+                                    break
+
+                        # Nếu toàn bộ lần thử bằng proxy đều thất bại, tự động thử 1 lần bằng Direct IP
+                        if not stopped_during_retry and (not batch_results or _is_bad_batch(batch_results)) and proxies and not attempted_direct_fallback:
+                            try:
+                                close_worker_session()
+                                t_session = BrowserSession(
+                                    headless=settings.headless,
+                                    proxy=None,
+                                    cf_cookie=settings.cf_cookie,
+                                )
+                                t_session.__enter__()
+                                current_worker_proxy = None
+                                results_map = get_traffic_bulk(t_session, chunk)
+                                batch_results = [
+                                    results_map.get(d, TrafficResult(d, status="error", error="Thiếu kết quả"))
+                                    for d in chunk
+                                ]
+                                processed_with_session += 1
+                            except Exception as direct_err:
+                                last_error = direct_err
+                                close_worker_session()
+
+                        if stopped_during_retry:
+                            break
+                        if not batch_results:
+                            error_text = str(last_error) if last_error else "Đã dừng"
+                            batch_results = [
+                                TrafficResult(d, status="error", error=f"Lỗi: {error_text}")
+                                for d in chunk
+                            ]
+
+                        cache.put_many(batch_results)  # checkpoint local trước khi phát kết quả ra UI
                         for res in batch_results:
-                            t_cache.put(res)
                             with emit_lock:
                                 outcome.fetched += 1
                             safe_emit(res)
                         if batch_cb:
                             batch_cb(chunk_idx + 1, len(batches), batch_results)
-                except Exception as b_err:
-                    batch_results = [
-                        TrafficResult(d, status="error", error=f"Lỗi: {b_err}")
-                        for d in chunk
-                    ]
-                    for res in batch_results:
-                        with emit_lock:
-                            outcome.fetched += 1
-                        safe_emit(res)
-                    if batch_cb:
-                        batch_cb(chunk_idx + 1, len(batches), batch_results)
-                finally:
-                    try:
-                        t_cache.close()
-                    except Exception:
-                        pass
 
-            with ThreadPoolExecutor(max_workers=settings.concurrency) as executor:
-                futures = [
-                    executor.submit(worker, bi, chunk)
-                    for bi, chunk in enumerate(batches)
-                ]
+                        if _is_bad_batch(batch_results):
+                            consecutive_worker_bad += 1
+                            with emit_lock:
+                                outcome.blocked_batches += 1
+                            if consecutive_worker_bad >= settings.backoff_after:
+                                close_worker_session()
+                                if proxies and len(proxies) > worker_count:
+                                    proxy_slot = (proxy_slot + worker_count) % len(proxies)
+                                cooldown_wait = settings.cooldown + worker_rng.uniform(0, 10)
+                                if run_state_cb:
+                                    run_state_cb("cooldown", worker_idx + 1, cooldown_wait)
+                                if _wait_or_stop(cooldown_wait, should_stop):
+                                    with emit_lock:
+                                        outcome.cancelled = True
+                                    break
+                                consecutive_worker_bad = 0
+                        else:
+                            consecutive_worker_bad = 0
+
+                        if position < len(assigned_batches) - 1:
+                            if _wait_or_stop(
+                                worker_rng.uniform(settings.min_delay, settings.max_delay),
+                                should_stop,
+                            ):
+                                with emit_lock:
+                                    outcome.cancelled = True
+                                break
+                finally:
+                    close_worker_session()
+
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [executor.submit(worker, i, assigned) for i, assigned in enumerate(assignments)]
                 for fut in futures:
                     fut.result()
 
@@ -236,8 +373,8 @@ def run_batch(
                     d, TrafficResult(d, status="error", error="Thiếu kết quả")) for d in chunk]
 
                 # Emit và lưu cache ngay lập tức để UI không bị chờ
+                cache.put_many(batch_results)
                 for res in batch_results:
-                    cache.put(res)
                     outcome.fetched += 1
                     emit(res)
                 if batch_cb:
@@ -257,13 +394,20 @@ def run_batch(
                 if consecutive_bad >= settings.backoff_after:
                     proxy_idx += 1  # đổi proxy (nếu có) cho lần sau
                     close_session()  # buộc mở phiên mới
-                    time.sleep(settings.cooldown + rng.uniform(0, 10))
+                    cooldown_wait = settings.cooldown + rng.uniform(0, 10)
+                    if run_state_cb:
+                        run_state_cb("cooldown", 1, cooldown_wait)
+                    if _wait_or_stop(cooldown_wait, should_stop):
+                        outcome.cancelled = True
+                        break
                     consecutive_bad = 0
             else:
                 consecutive_bad = 0
 
             if bi < len(batches) - 1:  # nghỉ ngẫu nhiên giữa các lô
-                time.sleep(rng.uniform(settings.min_delay, settings.max_delay))
+                if _wait_or_stop(rng.uniform(settings.min_delay, settings.max_delay), should_stop):
+                    outcome.cancelled = True
+                    break
 
         return outcome
     finally:
@@ -288,6 +432,9 @@ def run_auto_batch(
     batch_cb: Optional[BatchCb] = None,
     should_stop: Optional[Callable[[], bool]] = None,
     resolve_workers: int = 10,
+    cache_progress_cb: Optional[CacheProgressCb] = None,
+    resume_cb: Optional[ResumeCb] = None,
+    run_state_cb: Optional[RunStateCb] = None,
 ) -> BatchOutcome:
     """Tự nhận diện mỗi dòng là DOMAIN hay TÊN BRAND.
 
@@ -325,8 +472,26 @@ def run_auto_batch(
         total = len(lines)
         labels: dict[str, str] = {}     # line gốc -> label (Brand)
         result_map: dict[str, Optional[str]] = {}   # line gốc -> domain
-        with ThreadPoolExecutor(max_workers=max(1, resolve_workers)) as ex:
-            futures = {ex.submit(resolve_one, ln): ln for ln in lines}
+        brand_lines = []
+        for line in lines:
+            if should_stop and should_stop():
+                outcome.cancelled = True
+                break
+            if looks_like_domain(line):
+                dom = normalize_domain(line)
+                labels[line] = dom or line
+                result_map[line] = dom
+                done += 1
+                if resolve_cb:
+                    resolve_cb(done, total, labels[line], dom)
+            else:
+                brand_lines.append(line)
+
+        if outcome.cancelled:
+            return outcome
+
+        with ThreadPoolExecutor(max_workers=max(1, min(resolve_workers, len(brand_lines)))) as ex:
+            futures = {ex.submit(resolve_one, ln): ln for ln in brand_lines}
             for fut in futures:
                 if should_stop and should_stop():
                     outcome.cancelled = True
@@ -357,7 +522,9 @@ def run_auto_batch(
         by_domain: dict[str, TrafficResult] = {}
         if domains and not (should_stop and should_stop()):
             traffic = run_batch(domains, settings, progress_cb=progress_cb,
-                                batch_cb=batch_cb, should_stop=should_stop)
+                                batch_cb=batch_cb, cache_progress_cb=cache_progress_cb,
+                                should_stop=should_stop, resume_cb=resume_cb,
+                                run_state_cb=run_state_cb)
             by_domain = {r.domain: r for r in traffic.results}
             outcome.from_cache = traffic.from_cache
             outcome.fetched = traffic.fetched
