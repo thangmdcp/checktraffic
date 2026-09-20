@@ -1,4 +1,4 @@
-"""Web app check traffic hàng loạt — UI/UX Pro Max Glassmorphism (One-time Typewriter Title, Icon Popover Fix, Wider Input Frame)."""
+"""CheckTraffic Pro — bulk traffic workspace with resumable scans."""
 
 from __future__ import annotations
 
@@ -17,26 +17,29 @@ from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode
 from trafficcv.scraper import (parse_brand_list, looks_like_domain,
                                filter_results, parse_number)
 from trafficcv.runner import RunSettings, run_auto_batch, load_proxies
+from trafficcv.browser import parse_proxy_list
 from trafficcv.brand import load_serper_keys
 from trafficcv.cache import Cache
 from trafficcv.excel import results_to_dataframe, results_to_xlsx_bytes, results_to_csv_bytes
 
+APP_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = APP_DIR / "assets"
+LOGO_MARK_FILE = ASSETS_DIR / "checktraffic-mark.svg"
+FAVICON_FILE = ASSETS_DIR / "checktraffic-favicon.png"
+
 st.set_page_config(
     page_title="CheckTraffic Pro — Data Intelligence",
-    page_icon="📈",
+    page_icon=str(FAVICON_FILE) if FAVICON_FILE.exists() else "📈",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# ---- Cấu hình lưu trữ cài đặt (settings.json) & Background ----
-SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
-LOGO_FILE = Path(__file__).resolve().parent / "logo_b64.txt"
-BG_LIGHT_FILE = Path(__file__).resolve().parent / "bg_light_b64.txt"
-BG_DARK_FILE = Path(__file__).resolve().parent / "bg_dark_b64.txt"
-
-LOGO_B64 = LOGO_FILE.read_text(encoding="utf-8").strip() if LOGO_FILE.exists() else ""
-BG_LIGHT_B64 = BG_LIGHT_FILE.read_text(encoding="utf-8").strip() if BG_LIGHT_FILE.exists() else ""
-BG_DARK_B64 = BG_DARK_FILE.read_text(encoding="utf-8").strip() if BG_DARK_FILE.exists() else ""
+# ---- Cấu hình lưu trữ cài đặt (settings.json) & logo ----
+SETTINGS_FILE = APP_DIR / "settings.json"
+LOGO_MARK_B64 = (
+    base64.b64encode(LOGO_MARK_FILE.read_bytes()).decode("ascii")
+    if LOGO_MARK_FILE.exists() else ""
+)
 
 
 def load_saved_settings() -> dict:
@@ -51,11 +54,29 @@ def load_saved_settings() -> dict:
 def save_settings(data: dict):
     try:
         SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        SETTINGS_FILE.chmod(0o600)
     except Exception:
         pass
 
 
 saved_conf = load_saved_settings()
+
+if "scan_running" not in st.session_state:
+    st.session_state["scan_running"] = False
+if "scan_stopping" not in st.session_state:
+    st.session_state["scan_stopping"] = False
+if "scan_stop_event" not in st.session_state:
+    st.session_state["scan_stop_event"] = None
+if "scan_worker_thread" not in st.session_state:
+    st.session_state["scan_worker_thread"] = None
+
+active_scan_thread = st.session_state.get("scan_worker_thread")
+if (st.session_state.get("scan_running") and active_scan_thread is not None
+        and not active_scan_thread.is_alive()):
+    st.session_state["scan_running"] = False
+    st.session_state["scan_stopping"] = False
+    st.session_state["scan_worker_thread"] = None
+    st.session_state["scan_stop_event"] = None
 
 # ---- UI-UX Pro Max Design Tokens (Glassmorphism & SaaS Dashboard) ----
 PRIMARY = "#1E40AF"      # Deep Royal Blue
@@ -64,6 +85,7 @@ SECONDARY = "#3B82F6"    # Slate Blue
 CYAN = "#06B6D4"
 SUCCESS, DANGER, WARNING = "#10B981", "#EF4444", "#D97706"
 MAX_TABLE_ROWS = 1000
+ALL_PROJECTS_LABEL = "Tất cả website"
 
 THEMES = {
     "Sáng": dict(
@@ -90,9 +112,6 @@ THEMES = {
 theme_name = saved_conf.get("theme", "Sáng")
 T = THEMES[theme_name]
 
-active_bg_b64 = BG_DARK_B64 if theme_name == "Tối" else BG_LIGHT_B64
-bg_css_val = f"url('data:image/jpeg;base64,{active_bg_b64}') center/cover fixed !important;" if active_bg_b64 else f"{T['bg']} !important;"
-
 # ============================ CSS (Glassmorphism & Typewriter Animation) ============================
 st.markdown(
     f"""
@@ -111,7 +130,7 @@ st.markdown(
     }}
     
     html, body, .stApp {{ font-family:'Plus Jakarta Sans', sans-serif; }}
-    .stApp {{ background: {bg_css_val} }}
+    .stApp {{ background:{T['bg']} !important; }}
     
     /* Ẩn hoàn toàn Sidebar */
     [data-testid="stSidebar"], [data-testid="stSidebarNav"], [data-testid="stExpandSidebarButton"] {{
@@ -120,7 +139,8 @@ st.markdown(
     
     /* Ẩn chrome cũ Streamlit */
     #MainMenu, footer, [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"],
-    [data-testid="stDecoration"], [data-testid="stHeaderActionElements"] {{ display:none !important; }}
+    [data-testid="stDecoration"], [data-testid="stHeaderActionElements"],
+    [data-testid="stStatusWidget"], [data-testid="stElementToolbar"] {{ display:none !important; }}
     header[data-testid="stHeader"] {{ background:transparent; }}
     
     .block-container {{ padding-top:1.2rem; max-width:1320px; }}
@@ -253,37 +273,6 @@ st.markdown(
         box-shadow:0 14px 28px -8px rgba(30, 64, 175, 0.5) !important; 
     }}
 
-    /* Typewriter Title Animation — HIỆN 1 LẦN THÔI */
-    .typewriter-box {{
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 12px;
-    }}
-    .typing-container {{
-        display: inline-block;
-        overflow: hidden;
-    }}
-    .typing-text {{
-        display: inline-block;
-        overflow: hidden;
-        white-space: nowrap;
-        border-right: 2.5px solid {PRIMARY};
-        font-size: 14px;
-        font-weight: 700;
-        color: {T['text']};
-        width: 0;
-        animation: typing 2.5s steps(42, end) 0.5s 1 forwards, blink .75s step-end 4;
-    }}
-    @keyframes typing {{
-        from {{ width: 0; }}
-        to {{ width: 100%; }}
-    }}
-    @keyframes blink {{
-        from, to {{ border-color: transparent; }}
-        50% {{ border-color: {PRIMARY}; }}
-    }}
-
     /* Chips */
     .chips {{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; height:100%; }}
     .chip {{ border:1px solid {T['border']}; border-radius:999px; padding:4px 12px; font-size:12px;
@@ -295,24 +284,275 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# 2026 workspace refresh: giảm nhiễu thị giác, tăng hierarchy và khả năng đọc.
+st.markdown(
+    f"""
+    <style>
+    .stApp {{
+        background:
+            radial-gradient(circle at 8% 0%, rgba(59,130,246,.12), transparent 28%),
+            radial-gradient(circle at 92% 8%, rgba(139,92,246,.10), transparent 26%),
+            linear-gradient(180deg, {T['bg']} 0%, {T['bg']} 72%, {T['hover']} 100%) !important;
+    }}
+    .block-container {{ max-width:1440px; padding:1rem 2rem 2.5rem; }}
+
+    .app-topbar {{
+        display:flex; align-items:center; gap:13px; padding:8px 0 14px;
+    }}
+    .app-logo {{
+        width:46px; height:46px; border-radius:14px; object-fit:cover;
+        box-shadow:0 10px 28px rgba(37,99,235,.25);
+    }}
+    .brand-line {{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }}
+    .brand-name {{ color:{T['text']} !important; font-size:21px; font-weight:800; letter-spacing:-.7px; }}
+    .brand-name em {{ color:{SECONDARY}; font-style:normal; }}
+    .health-badge {{
+        display:inline-flex; align-items:center; gap:6px; padding:4px 9px;
+        border:1px solid rgba(16,185,129,.22); border-radius:999px;
+        background:rgba(16,185,129,.08); color:{SUCCESS} !important;
+        font-size:10px; font-weight:800; letter-spacing:.04em;
+    }}
+    .health-badge::before {{ content:""; width:6px; height:6px; border-radius:50%; background:{SUCCESS}; }}
+
+    .workspace-intro {{ margin:12px 0 14px; max-width:850px; }}
+    .workspace-title {{
+        margin:0; color:{T['text']} !important; font-size:clamp(24px,2.4vw,32px);
+        line-height:1.15; font-weight:800; letter-spacing:-1px;
+    }}
+
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        background:{T['panel']} !important; border:1px solid {T['border']} !important;
+        border-radius:18px !important; backdrop-filter:blur(18px) !important;
+        box-shadow:0 18px 50px rgba(15,23,42,.07) !important;
+    }}
+    [data-testid="stVerticalBlockBorderWrapper"] > div {{ padding:1.15rem 1.2rem !important; }}
+    .scan-label {{
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        margin-bottom:10px;
+    }}
+    .scan-label strong {{ color:{T['text']} !important; font-size:14px; }}
+    .scan-label span {{ color:{T['muted']} !important; font-size:11px; }}
+    textarea[aria-label="Danh sách website hoặc tên brand"] {{ min-height:220px !important; font-size:13px; }}
+
+    .run-readiness {{ min-height:270px; display:flex; flex-direction:column; }}
+    .ready-kicker {{
+        color:{T['muted']} !important; font-size:10px; font-weight:800;
+        letter-spacing:.12em; text-transform:uppercase;
+    }}
+    .ready-state {{
+        display:flex; align-items:center; gap:9px; margin:8px 0 18px;
+        color:{T['text']} !important; font-size:18px; font-weight:800;
+    }}
+    .ready-state .pulse {{
+        width:9px; height:9px; border-radius:50%; background:var(--state-color);
+        box-shadow:0 0 0 5px color-mix(in srgb, var(--state-color) 14%, transparent);
+    }}
+    .ready-row {{
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        padding:11px 0; border-top:1px solid {T['border']};
+    }}
+    .ready-row span {{ color:{T['muted']} !important; font-size:12px; }}
+    .ready-row b {{ color:{T['text']} !important; font-size:12px; text-align:right; }}
+
+    .chips {{ height:auto; min-height:38px; }}
+    .chip {{ background:{T['hover']}; border-color:{T['border']}; padding:6px 10px; }}
+    .chip.accent {{ color:{SECONDARY}; background:rgba(59,130,246,.10); border-color:rgba(59,130,246,.24); }}
+
+    .stats {{ gap:12px; margin:22px 0 16px; }}
+    .stat {{
+        position:relative; overflow:hidden; padding:16px 17px; border-radius:16px;
+        box-shadow:0 12px 34px rgba(15,23,42,.05);
+    }}
+    .stat:hover {{ transform:none; box-shadow:0 14px 38px rgba(15,23,42,.08); }}
+    .stat-top {{ display:flex; align-items:center; justify-content:space-between; gap:10px; }}
+    .stat-icon {{
+        width:32px; height:32px; border-radius:10px; display:grid; place-items:center;
+        background:color-mix(in srgb, var(--card-color) 12%, transparent);
+        color:var(--card-color) !important;
+    }}
+    .stat .lbl {{ text-transform:none; letter-spacing:0; font-size:11px; }}
+    .stat .val {{ font-size:25px; margin-top:10px; }}
+
+    .panel-title {{
+        padding:0; border:0; background:transparent; text-transform:none;
+        letter-spacing:-.1px; font-size:13px; margin:2px 0 10px;
+    }}
+    /* Unified controls */
+    [data-testid="stWidgetLabel"] p {{
+        color:{T['text']} !important; font-size:12px !important; font-weight:700 !important;
+        letter-spacing:-.05px !important;
+    }}
+    .stButton>button, .stDownloadButton>button,
+    div[data-testid="stPopover"] > button {{
+        min-height:42px !important; border:1px solid {T['border']} !important;
+        border-radius:10px !important; background:{T['inputbg']} !important;
+        color:{T['text']} !important; box-shadow:0 1px 2px rgba(15,23,42,.04) !important;
+        font-size:13px !important; font-weight:700 !important; letter-spacing:-.05px !important;
+        transition:border-color .16s ease, background .16s ease, box-shadow .16s ease !important;
+    }}
+    .stButton>button *, .stDownloadButton>button *,
+    div[data-testid="stPopover"] > button * {{ color:inherit !important; }}
+    .stButton>button:hover, .stDownloadButton>button:hover,
+    div[data-testid="stPopover"] > button:hover {{
+        transform:none !important; background:{T['hover']} !important;
+        border-color:rgba(59,130,246,.45) !important; box-shadow:0 3px 10px rgba(15,23,42,.07) !important;
+    }}
+    .stButton>button:focus-visible, .stDownloadButton>button:focus-visible,
+    div[data-testid="stPopover"] > button:focus-visible,
+    [data-baseweb="select"]>div:focus-within,
+    [data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {{
+        outline:none !important; border-color:{SECONDARY} !important;
+        box-shadow:0 0 0 3px rgba(59,130,246,.16) !important;
+    }}
+    .stButton>button:disabled, .stDownloadButton>button:disabled {{
+        opacity:.42 !important; cursor:not-allowed !important; box-shadow:none !important;
+    }}
+    [data-testid="stBaseButton-primary"] {{
+        background:{SECONDARY} !important; border-color:{SECONDARY} !important;
+        color:#fff !important; box-shadow:0 5px 14px rgba(37,99,235,.22) !important;
+    }}
+    [data-testid="stBaseButton-primary"]:hover {{
+        background:#2563EB !important; border-color:#2563EB !important;
+        box-shadow:0 7px 18px rgba(37,99,235,.28) !important;
+    }}
+    [data-testid="stBaseButton-tertiary"] {{
+        background:rgba(239,68,68,.07) !important; border-color:rgba(239,68,68,.18) !important;
+        color:{DANGER} !important;
+    }}
+    [data-testid="stBaseButton-tertiary"]:hover {{
+        background:rgba(239,68,68,.12) !important; border-color:rgba(239,68,68,.35) !important;
+    }}
+
+    /* Inputs and dropdowns */
+    [data-baseweb="input"], [data-baseweb="textarea"],
+    [data-baseweb="select"]>div {{
+        min-height:42px !important; border:1px solid {T['border']} !important;
+        border-radius:10px !important; background:{T['inputbg']} !important;
+        box-shadow:0 1px 2px rgba(15,23,42,.03) !important;
+    }}
+    [data-baseweb="input"] input, [data-baseweb="textarea"] textarea,
+    [data-baseweb="select"] * {{ color:{T['text']} !important; font-size:13px !important; }}
+    [data-baseweb="input"] input::placeholder, [data-baseweb="textarea"] textarea::placeholder {{
+        color:{T['muted']} !important; opacity:.72 !important;
+    }}
+    [data-baseweb="select"]>div:hover {{ border-color:rgba(59,130,246,.42) !important; }}
+    [data-baseweb="popover"] ul[role="listbox"] {{
+        padding:5px !important; border:1px solid {T['border']} !important;
+        border-radius:11px !important; background:{T['sidebar']} !important;
+        box-shadow:0 16px 40px rgba(15,23,42,.14) !important;
+    }}
+    [data-baseweb="popover"] li[role="option"] {{
+        min-height:38px !important; margin:2px 0 !important; border-radius:8px !important;
+        color:{T['text']} !important; font-size:13px !important;
+    }}
+    [data-baseweb="popover"] li[role="option"]:hover {{ background:{T['hover']} !important; }}
+    [data-baseweb="popover"] li[role="option"][aria-selected="true"] {{
+        background:rgba(59,130,246,.12) !important; color:{SECONDARY} !important;
+    }}
+
+    /* Tabs as a compact segmented nav */
+    div[data-baseweb="tab-list"] {{
+        gap:4px !important; padding:4px !important; border-radius:11px !important;
+        background:{T['hover']} !important;
+    }}
+    button[data-baseweb="tab"] {{
+        height:38px !important; padding:0 14px !important; border-radius:8px !important;
+        color:{T['muted']} !important; font-size:12px !important; font-weight:700 !important;
+    }}
+    button[data-baseweb="tab"][aria-selected="true"] {{
+        background:{T['inputbg']} !important; color:{T['text']} !important;
+        box-shadow:0 2px 8px rgba(15,23,42,.08) !important;
+    }}
+    div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] {{ display:none !important; }}
+
+    /* Segmented controls: chỉ tạo pill quanh nhóm nút, không bọc cả label. */
+    div[data-testid="stButtonGroup"] {{
+        width:auto !important; padding:0 !important; border:0 !important;
+        border-radius:0 !important; background:transparent !important;
+        box-shadow:none !important;
+    }}
+    div[data-testid="stButtonGroup"] > div[data-baseweb="button-group"] {{
+        display:inline-flex !important; width:auto !important; max-width:100% !important;
+        align-self:flex-start !important; gap:5px !important; padding:0 !important;
+        border:0 !important; border-radius:0 !important;
+        background:transparent !important; box-shadow:none !important;
+    }}
+    div[data-testid="stButtonGroup"] > div[data-baseweb="button-group"]::after {{
+        content:none !important; display:none !important;
+    }}
+    div[data-testid="stButtonGroup"] > div[data-baseweb="button-group"] button {{
+        flex:0 0 auto !important; width:auto !important; min-width:72px !important; min-height:34px !important;
+        padding:0 13px !important; border:1px solid transparent !important; border-radius:9px !important;
+        background:transparent !important; color:{T['muted']} !important; box-shadow:none !important;
+        font-size:12px !important; font-weight:700 !important;
+    }}
+    div[data-testid="stButtonGroup"] > div[data-baseweb="button-group"] button:hover {{
+        background:rgba(59,130,246,.08) !important; color:{T['text']} !important;
+    }}
+    div[data-testid="stButtonGroup"] > div[data-baseweb="button-group"] button[aria-checked="true"] {{
+        background:rgba(59,130,246,.12) !important; color:{SECONDARY} !important;
+        border-color:rgba(59,130,246,.24) !important; box-shadow:none !important;
+    }}
+    div[data-testid="stButtonGroup"] > div[data-baseweb="button-group"] button[aria-checked="true"] * {{
+        color:{SECONDARY} !important;
+    }}
+    button[role="switch"] {{
+        width:38px !important; min-width:38px !important; height:22px !important;
+        padding:2px !important; border:0 !important; background:#94A3B8 !important;
+    }}
+    button[role="switch"][aria-checked="true"] {{ background:{SECONDARY} !important; }}
+
+    /* Popovers */
+    div[data-testid="stPopover"] > button {{
+        width:42px !important; height:42px !important; min-width:42px !important; padding:0 !important;
+    }}
+    div[data-testid="stPopover"] > button svg {{ display:none !important; }}
+    div[data-testid="stPopover"] > button p {{ margin:0 !important; font-size:0 !important; }}
+    div[data-testid="stPopover"] > button p span {{ font-size:20px !important; }}
+    div[data-testid="stPopoverBody"] {{
+        width:min(460px, calc(100vw - 32px)) !important; min-width:0 !important; max-width:460px !important;
+        max-height:min(760px, calc(100vh - 40px)) !important; overflow:auto !important;
+        padding:14px !important; border:1px solid {T['border']} !important;
+        border-radius:16px !important; background:{T['sidebar']} !important;
+        box-shadow:0 24px 70px rgba(15,23,42,.18) !important; backdrop-filter:blur(20px) !important;
+    }}
+    div[data-testid="stPopoverBody"] h3 {{ font-size:18px !important; margin:0 0 4px !important; }}
+    div[data-testid="stPopoverBody"] h5 {{ font-size:14px !important; margin:0 !important; }}
+    div[data-testid="stPopoverBody"] [data-testid="stVerticalBlock"] {{ gap:.72rem !important; }}
+    .app-footer {{
+        display:flex; align-items:center; justify-content:center; gap:10px; margin-top:42px;
+        padding:18px 0 4px; border-top:1px solid {T['border']}; color:{T['muted']} !important;
+        font-size:11px;
+    }}
+    .app-footer b {{ color:{T['text']} !important; }}
+    .app-footer a {{ color:{SECONDARY} !important; text-decoration:none; font-weight:700; }}
+
+    @media (max-width:900px) {{
+        .block-container {{ padding:1rem 1rem 2rem; }}
+        .stats {{ grid-template-columns:repeat(2,1fr); }}
+        .workspace-title {{ font-size:28px; }}
+    }}
+    @media (max-width:540px) {{
+        .stats {{ grid-template-columns:1fr; }}
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ============================ Top Header Bar ============================
 c_head1, c_head2 = st.columns([5.5, 0.5], vertical_alignment="center")
 
 with c_head1:
-    logo_img_html = f'<img src="data:image/jpeg;base64,{LOGO_B64}" style="width:44px; height:44px; border-radius:12px; box-shadow:0 6px 18px rgba(30,64,175,0.25);" />' if LOGO_B64 else '<span class="mi" style="font-size:36px; color:#1E40AF;">show_chart</span>'
+    logo_img_html = f'<img class="app-logo" src="data:image/svg+xml;base64,{LOGO_MARK_B64}" alt="CheckTraffic Pro" />' if LOGO_MARK_B64 else '<span class="mi app-logo" style="display:grid;place-items:center;font-size:28px;color:#2563EB;">query_stats</span>'
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:14px; margin-bottom: 2px;">
+        <div class="app-topbar">
             {logo_img_html}
             <div>
-                <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.6px; color: {T['text']}; display:flex; align-items:center; gap:8px;">
-                    CheckTraffic <span style="background: linear-gradient(135deg, #1E40AF, #3B82F6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Pro</span>
-                    <span style="background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25); padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
-                        <span style="width:6px; height:6px; border-radius:50%; background:#10B981;"></span> Hybrid Cloud
-                    </span>
-                </div>
-                <div style="font-size: 13px; color: {T['muted']};">
-                    Công cụ phân tích Lượt truy cập & Thương hiệu tự động
+                <div class="brand-line">
+                    <span class="brand-name">CheckTraffic <em>Pro</em></span>
+                    <span class="health-badge">TỰ LƯU</span>
                 </div>
             </div>
         </div>
@@ -321,25 +561,61 @@ with c_head1:
     )
 
 with c_head2:
-    with st.popover("⚙️", help="Cài đặt & Tài liệu REST API", use_container_width=True):
-        st.markdown("### ⚙️ Cài Đặt & REST API")
+    with st.popover(":material/tune:", help="Cài đặt", width="stretch"):
+        st.markdown("### Cài đặt")
         
-        tab1, tab2, tab3 = st.tabs(["⚙️ Cấu hình", "⚡ Bộ lọc", "🔌 REST API"])
+        tab1, tab2, tab3 = st.tabs(["Cấu hình", "Bộ lọc", "API"])
         
         with tab1:
-            p_theme = st.radio("Giao diện", ["Sáng", "Tối"], index=0 if saved_conf.get("theme") == "Sáng" else 1, horizontal=True, key="theme_input")
+            p_theme = st.segmented_control(
+                "Giao diện",
+                ["Sáng", "Tối"],
+                default=saved_conf.get("theme", "Sáng"),
+                key="theme_input",
+                width="content",
+            ) or saved_conf.get("theme", "Sáng")
             
             p_speed_val = saved_conf.get("speed", "Vừa")
-            p_speed = st.select_slider("Tốc độ quét", ["An toàn", "Vừa", "Nhanh"], value=p_speed_val, key="speed_input")
+            p_speed = st.segmented_control(
+                "Tốc độ quét",
+                ["An toàn", "Vừa", "Nhanh"],
+                default=p_speed_val,
+                key="speed_input",
+                width="content",
+            ) or p_speed_val
             
             p_force_refresh_val = saved_conf.get("force_refresh", False)
-            p_force_refresh = st.toggle("⚡ Quét mới & Ghi đè Supabase", value=p_force_refresh_val, help="Bỏ qua dữ liệu cũ trong Supabase, cào mới 100% từ live web và ghi đè dữ liệu mới vào Supabase.", key="force_toggle")
+            p_force_refresh = st.toggle("Bỏ cache khi quét", value=p_force_refresh_val, help="Lấy lại dữ liệu live và ghi đè kết quả cũ.", key="force_toggle")
             use_cache = not p_force_refresh
             
             p_use_parallel = st.toggle("Quét song song", value=saved_conf.get("use_parallel", True), key="parallel_toggle")
-            p_concurrency = st.slider("Số luồng Chromium", 1, 5, int(saved_conf.get("concurrency", 3)), disabled=not p_use_parallel, key="concurrency_input") if p_use_parallel else 1
+            current_concurrency = max(1, min(5, int(saved_conf.get("concurrency", 3))))
+            p_concurrency = st.selectbox(
+                "Số worker",
+                list(range(1, 6)),
+                index=current_concurrency - 1,
+                disabled=not p_use_parallel,
+                key="concurrency_input",
+            ) if p_use_parallel else 1
 
-            p_proxy_text = st.text_area("Proxy riêng (tùy chọn)", value=saved_conf.get("proxy_input", ""), height=65, key="proxy_input", placeholder="http://host:port")
+            p_proxy_text = st.text_area(
+                "Danh sách proxy (mỗi dòng một proxy)",
+                value=saved_conf.get("proxy_input", ""),
+                height=120,
+                key="proxy_input",
+                placeholder=("host:port\nhost:port:user:password\n"
+                             "http://user:password@host:port\nsocks5://host:port"),
+                help=("Hỗ trợ HTTP, HTTPS và SOCKS5. Mỗi worker chỉ dùng một proxy; "
+                      "proxy có tài khoản dùng dạng user:password@host:port."),
+            )
+            parsed_proxy_preview, proxy_preview_errors = parse_proxy_list(p_proxy_text)
+            if parsed_proxy_preview:
+                st.success(f"Đã nhận {len(parsed_proxy_preview)} proxy hợp lệ.", icon="✅")
+            if proxy_preview_errors:
+                error_lines = ", ".join(
+                    f"dòng {line_no}: {message}" for line_no, message in proxy_preview_errors[:5]
+                )
+                st.warning(f"Bỏ qua proxy sai — {error_lines}")
 
         with tab2:
             p_filter_on = st.toggle("Bật bộ lọc traffic", value=saved_conf.get("filter_on", False), key="filter_toggle")
@@ -359,11 +635,11 @@ with c_head2:
             guide_file = Path(__file__).parent / "CHECK_TRAFFIC_API.md"
             if guide_file.exists():
                 st.download_button(
-                    label="⬇️ Tải HD Tích Hợp AI (.md)",
+                    label=":material/download: Tải hướng dẫn",
                     data=guide_file.read_bytes(),
                     file_name="CHECK_TRAFFIC_API.md",
                     mime="text/markdown",
-                    use_container_width=True
+                    width="stretch"
                 )
 
         current_conf = {
@@ -383,90 +659,167 @@ with c_head2:
             "drop_no_site": p_drop_no_site,
         }
         if current_conf != saved_conf:
+            theme_changed = current_conf["theme"] != saved_conf.get("theme", "Sáng")
             save_settings(current_conf)
+            if theme_changed:
+                st.rerun()
+
+active_conf = current_conf
 
 # Bind active variables
-speed = saved_conf.get("speed", "Vừa")
+speed = active_conf.get("speed", "Vừa")
 min_delay, max_delay = {"An toàn": (6.0, 12.0), "Vừa": (3.0, 8.0), "Nhanh": (1.5, 4.0)}[speed]
-use_cache = saved_conf.get("use_cache", True)
-force_refresh = saved_conf.get("force_refresh", False)
+use_cache = active_conf.get("use_cache", True)
+force_refresh = active_conf.get("force_refresh", False)
 if force_refresh:
     use_cache = False
-ttl_days = saved_conf.get("ttl_days", 90)
-use_parallel = saved_conf.get("use_parallel", True)
-concurrency = saved_conf.get("concurrency", 3) if use_parallel else 1
+ttl_days = active_conf.get("ttl_days", 90)
+use_parallel = active_conf.get("use_parallel", True)
+concurrency = active_conf.get("concurrency", 3) if use_parallel else 1
 
 server_proxies = load_proxies()
-proxy_text = saved_conf.get("proxy_input", "")
-custom_proxies = [ln.strip() for ln in proxy_text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-proxies_list = custom_proxies or server_proxies
+proxy_text = active_conf.get("proxy_input", "")
+has_custom_proxy_text = any(
+    line.strip() and not line.strip().startswith("#") for line in proxy_text.splitlines()
+)
+custom_proxies, custom_proxy_errors = parse_proxy_list(proxy_text)
+proxies_list = custom_proxies if has_custom_proxy_text else server_proxies
 use_proxy = bool(proxies_list)
+proxy_config_invalid = has_custom_proxy_text and not custom_proxies
 
 serper_keys = load_serper_keys()
 
-filter_on = saved_conf.get("filter_on", False)
-min_txt = saved_conf.get("min_txt", "5k")
-max_txt = saved_conf.get("max_txt", "")
-keep_unknown = saved_conf.get("keep_unknown", False)
-drop_no_site = saved_conf.get("drop_no_site", False)
+filter_on = active_conf.get("filter_on", False)
+min_txt = active_conf.get("min_txt", "5k")
+max_txt = active_conf.get("max_txt", "")
+keep_unknown = active_conf.get("keep_unknown", False)
+drop_no_site = active_conf.get("drop_no_site", False)
 
 
 # =========================== Project Management & Auto-Load ===========================
 cache_mgr = Cache()
 saved_projects = cache_mgr.get_projects()
 project_names = [p["name"] for p in saved_projects]
-all_proj_options = ["🌐 Tất cả web tích lũy trong Supabase"] + project_names
+all_proj_options = [ALL_PROJECTS_LABEL] + project_names
 
-# Auto-load initial results from Supabase if session_state["results"] is empty
-if "results" not in st.session_state or st.session_state["results"] is None:
+# Khôi phục bảng từ cache cả khi lần quét trước dừng/lỗi và để lại results=[].
+if not st.session_state.get("results") and not st.session_state.get("scan_running", False):
     initial_doms = cache_mgr.get_all_saved_domains()
-    st.session_state["last_sel_project"] = "🌐 Tất cả web tích lũy trong Supabase"
+    st.session_state["last_sel_project"] = ALL_PROJECTS_LABEL
     if initial_doms:
         initial_map = cache_mgr.get_many(initial_doms)
         st.session_state["results"] = list(initial_map.values())
+    else:
+        st.session_state["results"] = []
 cache_mgr.close()
 
 
 # =========================== Input Section ===========================
-st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-with st.container(border=True):
-    st.markdown(
-        f"""
-        <div class="typewriter-box">
-            <span class="mi" style="font-size:18px; color:{PRIMARY};">edit_note</span>
-            <div class="typing-container">
-                <span class="typing-text">Nhập danh sách website hoặc brand tại đây...</span>
+st.markdown(
+    """
+    <div class="workspace-intro">
+        <div class="workspace-title">Quét website hàng loạt</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+scan_col, readiness_col = st.columns([4.2, 1.45], gap="large")
+with scan_col:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="scan-label"><strong>Danh sách website / brand</strong>'
+            '<span>Mỗi dòng một mục</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.text_area(
+            "Danh sách website hoặc tên brand",
+            key="domains_input",
+            height=190,
+            label_visibility="collapsed",
+            placeholder="Dán danh sách vào đây…",
+        )
+
+        st.text_input(
+            "Tên dự án / lô quét (tùy chọn)",
+            key="project_name_input",
+            placeholder="🏷️ Đặt tên lô quét trước khi quét (ví dụ: Goaffpro US 12k, Brand Q3...)",
+            help="Nếu nhập tên dự án tại đây, lô quét sẽ tự động lưu thành Dự án trong Supabase ngay khi bắt đầu!",
+        )
+
+        preview = parse_brand_list(st.session_state.get("domains_input", ""))
+        ttl_seconds = 3650 * 24 * 3600  # Chỉ làm mới khi bật Quét mới & Ghi đè.
+        n_domain = sum(1 for x in preview if looks_like_domain(x))
+        n_brand = len(preview) - n_domain
+
+        col_a, col_stop, col_b = st.columns([1.25, 1.05, 2.7], vertical_alignment="center")
+        with col_a:
+            start = st.button(
+                ":material/play_arrow: Bắt đầu",
+                type="primary",
+                width="stretch",
+                disabled=st.session_state.get("scan_running", False) or proxy_config_invalid,
+            )
+            if start:
+                scan_stop_event = threading.Event()
+                st.session_state["scan_stop_event"] = scan_stop_event
+                st.session_state["scan_running"] = True
+                st.session_state["scan_stopping"] = False
+        with col_stop:
+            stop_scan = st.button(
+                ":material/stop: Dừng an toàn",
+                type="secondary",
+                width="stretch",
+                disabled=not st.session_state.get("scan_running", False),
+                help="Dừng sau lô hiện tại; kết quả thành công đã được checkpoint vào SQLite/Supabase.",
+            )
+            if stop_scan:
+                active_stop_event = st.session_state.get("scan_stop_event")
+                if active_stop_event is not None:
+                    active_stop_event.set()
+                st.session_state["scan_stopping"] = True
+        with col_b:
+            if preview:
+                chips = [f'<span class="chip accent"><b>{len(preview):,}</b> mục</span>']
+                if n_domain:
+                    chips.append(f'<span class="chip">🌐 <b>{n_domain:,}</b> web</span>')
+                if n_brand:
+                    chips.append(f'<span class="chip">🏷️ <b>{n_brand:,}</b> brand</span>')
+                st.markdown(f'<div class="chips">{"".join(chips)}</div>', unsafe_allow_html=True)
+
+        if proxy_config_invalid:
+            st.error("Danh sách proxy chưa có dòng hợp lệ. Sửa proxy trong ⚙️ trước khi bắt đầu.")
+        elif st.session_state.get("scan_stopping"):
+            st.info("Đang dừng an toàn sau lô hiện tại… các kết quả đã quét vẫn được giữ lại.")
+
+with readiness_col:
+    effective_workers = min(concurrency, len(proxies_list)) if proxies_list else concurrency
+    checkpoint_count = len(st.session_state.get("results") or [])
+    if st.session_state.get("scan_stopping"):
+        run_state_label, state_color = "Đang dừng an toàn", WARNING
+    elif st.session_state.get("scan_running"):
+        run_state_label, state_color = "Đang quét", SECONDARY
+    elif proxy_config_invalid:
+        run_state_label, state_color = "Cần sửa proxy", DANGER
+    else:
+        run_state_label, state_color = "Sẵn sàng", SUCCESS
+    proxy_mode = f"{len(proxies_list)} proxy" if proxies_list else "Kết nối trực tiếp"
+    with st.container(border=True):
+        st.markdown(
+            f"""
+            <div class="run-readiness">
+                <div class="ready-kicker">Trạng thái tác vụ</div>
+                <div class="ready-state" style="--state-color:{state_color}">
+                    <span class="pulse"></span>{run_state_label}
+                </div>
+                <div class="ready-row"><span>Kết nối</span><b>{proxy_mode}</b></div>
+                <div class="ready-row"><span>Worker</span><b>{effective_workers}</b></div>
+                <div class="ready-row"><span>Tốc độ</span><b>{speed}</b></div>
+                <div class="ready-row"><span>Đã lưu</span><b>{checkpoint_count:,}</b></div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    st.text_area(
-        "Danh sách website hoặc tên brand",
-        key="domains_input",
-        height=180,
-        label_visibility="collapsed",
-        placeholder="Mỗi dòng 1 mục. Ví dụ:\ngoogle.com\nNike\nshygems.com",
-    )
-
-    preview = parse_brand_list(st.session_state.get("domains_input", ""))
-    ttl_seconds = 3650 * 24 * 3600  # Vô thời hạn (chỉ làm mới khi bật nút Quét mới & Ghi đè)
-    n_domain = sum(1 for x in preview if looks_like_domain(x))
-    n_brand = len(preview) - n_domain
-
-    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-    col_a, col_b = st.columns([1.3, 3.7], vertical_alignment="center")
-    with col_a:
-        start = st.button(":material/play_circle: Bắt đầu check", type="primary", use_container_width=True)
-    with col_b:
-        if preview:
-            chips = [f'<span class="chip accent"><b>{len(preview)}</b> mục tổng</span>']
-            if n_domain:
-                chips.append(f'<span class="chip">🌐 <b>{n_domain}</b> website</span>')
-            if n_brand:
-                chips.append(f'<span class="chip">🏷️ <b>{n_brand}</b> tên brand</span>')
-            st.markdown(f'<div class="chips">{"".join(chips)}</div>', unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ============================ Helpers: Bảng & Biểu đồ ============================
@@ -529,7 +882,7 @@ def _render_grid(df: pd.DataFrame, key: str = "grid"):
     df_clean = df.fillna("")
     st.dataframe(
         df_clean,
-        use_container_width=True,
+        width="stretch",
         height=520,
         hide_index=True,
         column_config={
@@ -589,75 +942,166 @@ def _stats(results):
     ok = sum(1 for r in results if r.status == "ok")
     nf = sum(1 for r in results if r.status in ("not_found", "no_website"))
     err = sum(1 for r in results if r.status in ("error", "blocked"))
-    cards = [("Tổng", len(results), ACCENT), ("Lấy được", ok, SUCCESS),
-             ("Không có dữ liệu", nf, WARNING), ("Lỗi / bị chặn", err, DANGER)]
+    cards = [
+        ("Tổng kết quả", len(results), ACCENT, "database"),
+        ("Lấy được traffic", ok, SUCCESS, "task_alt"),
+        ("Không có dữ liệu", nf, WARNING, "remove_circle"),
+        ("Lỗi / bị chặn", err, DANGER, "error"),
+    ]
     html = '<div class="stats">' + "".join(
-        f'<div class="stat"><div class="row"><span class="dot" style="color:{c};background:{c}"></span>'
-        f'<span class="lbl">{l}</span></div><div class="val">{v}</div></div>' for l, v, c in cards
+        f'<div class="stat" style="--card-color:{c}"><div class="stat-top">'
+        f'<span class="lbl">{l}</span><span class="stat-icon mi">{icon}</span></div>'
+        f'<div class="val">{v:,}</div></div>' for l, v, c, icon in cards
     ) + "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
 
-def _run_and_stream(items, settings, serper_keys=None):
+def _run_and_stream(items, settings, stop_event, serper_keys=None):
     q: "queue.Queue" = queue.Queue()
+    callback_lock = threading.Lock()
+    last_event = {"resolve": (0.0, 0), "progress": (0.0, 0)}
+
+    def queue_throttled(kind, done, total, *extra):
+        now = time.monotonic()
+        with callback_lock:
+            last_time, last_done = last_event[kind]
+            if done < total and now - last_time < 0.35 and done - last_done < 250:
+                return
+            last_event[kind] = (now, done)
+        q.put((kind, done, total, *extra))
 
     def worker():
         try:
             outcome = run_auto_batch(
                 items, serper_keys or [], settings,
-                resolve_cb=lambda d, t, b, dom: q.put(("resolve", d, t, b, dom)),
-                progress_cb=lambda d, t, r: q.put(("progress", d, t)),
-                batch_cb=lambda bi, bt, br: q.put(("batch", br)))
+                resolve_cb=lambda d, t, b, dom: queue_throttled("resolve", d, t, b, dom),
+                cache_progress_cb=lambda d, t: q.put(("cache", d, t)),
+                resume_cb=lambda cached, pending: q.put(("resume", cached, pending)),
+                run_state_cb=lambda phase, worker_no, seconds: q.put(
+                    ("run_state", phase, worker_no, seconds)
+                ),
+                progress_cb=lambda d, t, r: queue_throttled("progress", d, t),
+                batch_cb=lambda bi, bt, br: q.put(("batch", br)),
+                should_stop=stop_event.is_set)
             q.put(("done", outcome))
         except Exception as e:  # noqa: BLE001
             q.put(("error", e))
 
-    threading.Thread(target=worker, daemon=True).start()
+    scan_worker = threading.Thread(target=worker, daemon=True, name="checktraffic-scan")
+    st.session_state["scan_worker_thread"] = scan_worker
+    scan_worker.start()
     prog_box = st.empty()
     status = st.empty()
     table_area = st.empty()
     results = []
     started = time.time()
-    while True:
-        kind, *rest = q.get()
-        if kind == "resolve":
-            done, total, brand, dom = rest
-            prog_box.progress(done / total if total else 1.0)
-            status.markdown(f":material/search: Đang tìm website từ tên brand... **{done}/{total}**")
-        elif kind == "progress":
-            done, total = rest[:2]
-            prog_box.progress(done / total if total else 1.0)
-            elapsed = time.time() - started
-            rate = done / elapsed if elapsed > 0 else 0
-            eta = (total - done) / rate if rate > 0 else 0
-            status.markdown(f":material/monitoring: Check traffic **{done}/{total}** · "
-                            f"còn ~**{int(eta // 60)}m{int(eta % 60):02d}s**")
-        elif kind == "batch":
-            results.extend(rest[0])
-            table_area.dataframe(results_to_dataframe(results), use_container_width=True, height=350)
-        elif kind == "done":
-            prog_box.empty()
-            status.empty()
-            table_area.empty()
-            return rest[0]
-        else:
-            raise rest[0]
+    last_table_render = 0.0
+    try:
+        while True:
+            kind, *rest = q.get()
+            if kind == "resolve":
+                done, total, brand, dom = rest
+                prog_box.progress(done / total if total else 1.0)
+                status.markdown(f":material/search: Đang nhận diện website/brand... **{done}/{total}**")
+            elif kind == "cache":
+                done, total = rest
+                prog_box.progress(done / total if total else 1.0)
+                status.markdown(f":material/cloud_sync: Đang đối chiếu dữ liệu Supabase... **{done}/{total} lô**")
+            elif kind == "resume":
+                cached, pending = rest
+                total = cached + pending
+                prog_box.progress(cached / total if total else 1.0)
+                status.markdown(
+                    f":material/check_circle: Tiếp tục từ checkpoint: **{cached} đã có** · "
+                    f"**{pending} cần check**"
+                )
+            elif kind == "run_state":
+                phase, worker_no, seconds = rest
+                if phase == "cooldown":
+                    status.warning(
+                        f"Worker {worker_no} đang nghỉ {int(seconds)} giây vì traffic.cv trả lỗi/chặn. "
+                        "Có thể bấm Dừng an toàn."
+                    )
+                else:
+                    status.info(
+                        f"Worker {worker_no} gặp lỗi tạm thời, tự thử lại sau {int(seconds)} giây…"
+                    )
+            elif kind == "progress":
+                done, total = rest[:2]
+                prog_box.progress(done / total if total else 1.0)
+                elapsed = time.time() - started
+                rate = done / elapsed if elapsed > 0 else 0
+                eta = (total - done) / rate if rate > 0 else 0
+                status.markdown(f":material/monitoring: Check traffic **{done}/{total}** · "
+                                f"còn ~**{int(eta // 60)}m{int(eta % 60):02d}s**")
+            elif kind == "batch":
+                results.extend(rest[0])
+                # Giữ ngay kết quả từng lô trong session để bảng không mất nếu
+                # worker lỗi hoặc người dùng dừng giữa chừng.
+                st.session_state["results"] = results
+                now = time.monotonic()
+                if now - last_table_render >= 1.5:
+                    latest = results[-200:]
+                    table_area.dataframe(
+                        results_to_dataframe(latest),
+                        width="stretch",
+                        height=350,
+                    )
+                    last_table_render = now
+            elif kind == "done":
+                prog_box.empty()
+                status.empty()
+                table_area.empty()
+                return rest[0]
+            else:
+                raise rest[0]
+    finally:
+        stop_event.set()
 
 
 # ================================ Run ================================
 if start:
-    st.session_state["results"] = None
+    st.session_state["results"] = []
     if not preview:
+        st.session_state["scan_running"] = False
+        st.session_state["scan_stop_event"] = None
         st.warning("Chưa có dữ liệu hợp lệ — hãy dán danh sách vào ô trên.")
     else:
+        proj_name = st.session_state.get("project_name_input", "").strip()
+        if proj_name:
+            c_m = Cache()
+            doms_preview = list({d.lower().strip() for d in preview if d})
+            if doms_preview:
+                c_m.save_project(proj_name, doms_preview)
+            c_m.close()
+            st.session_state["last_sel_project"] = proj_name
+            st.toast(f"Đã gán lô quét vào dự án '{proj_name}'!", icon="📁")
+
         settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=use_cache,
                                ttl=ttl_seconds, headless=True,
                                proxies=proxies_list if use_proxy else None,
                                concurrency=concurrency)
         try:
-            outcome = _run_and_stream(preview, settings, serper_keys=serper_keys)
+            outcome = _run_and_stream(
+                preview,
+                settings,
+                st.session_state["scan_stop_event"],
+                serper_keys=serper_keys,
+            )
             st.session_state["results"] = outcome.results
-            if outcome.aborted_reason:
+            if proj_name and outcome.results:
+                doms_done = list({r.domain.lower().strip() for r in outcome.results if r.domain})
+                if doms_done:
+                    c_m = Cache()
+                    c_m.save_project(proj_name, doms_done)
+                    c_m.close()
+            st.session_state["scan_running"] = False
+            st.session_state["scan_stopping"] = False
+            st.session_state["scan_worker_thread"] = None
+            st.session_state["scan_stop_event"] = None
+            if outcome.cancelled:
+                st.warning("Đã dừng an toàn. Mọi kết quả thành công đến lô cuối đã được checkpoint.")
+            elif outcome.aborted_reason:
                 st.error(outcome.aborted_reason)
             else:
                 has_exhausted_brand = any(r.status == "no_website" and "Serper" in (r.error or "") for r in outcome.results)
@@ -666,6 +1110,10 @@ if start:
                 else:
                     st.toast("Hoàn tất quét toàn bộ danh sách!", icon="✅")
         except Exception as e:  # noqa: BLE001
+            st.session_state["scan_running"] = False
+            st.session_state["scan_stopping"] = False
+            st.session_state["scan_worker_thread"] = None
+            st.session_state["scan_stop_event"] = None
             st.error(f"Lỗi: {type(e).__name__}: {e}")
 
 # ============================ Kết quả ============================
@@ -711,7 +1159,7 @@ if st.session_state.get("results"):
     c_mgr = Cache()
     saved_projects = c_mgr.get_projects()
     project_names = [p["name"] for p in saved_projects]
-    all_proj_options = ["🌐 Tất cả web đã check"] + project_names
+    all_proj_options = [ALL_PROJECTS_LABEL] + project_names
     c_mgr.close()
 
     # --- Unified Compact Header Bar Above Table ---
@@ -722,29 +1170,29 @@ if st.session_state.get("results"):
         sel_project = st.selectbox("Dự án", all_proj_options, key="project_select", label_visibility="collapsed")
     
     with ch2:
-        btn_refresh_project = st.button("🔄", use_container_width=True, help="Quét mới 100% từ live web cho tất cả website trong bảng này")
+        btn_refresh_project = st.button(":material/refresh:", width="stretch", help="Quét lại dự án")
     
     with ch3:
-        with st.popover("💾", use_container_width=True, help="Quản lý / Lưu / Đổi tên dự án"):
-            st.markdown("##### 💾 Quản lý dự án / Bảng")
-            default_name_val = "" if sel_project.startswith("🌐") else sel_project
+        with st.popover(":material/folder_managed:", width="stretch", help="Quản lý dự án"):
+            st.markdown("##### Quản lý dự án")
+            default_name_val = "" if sel_project == ALL_PROJECTS_LABEL else sel_project
             save_name_input = st.text_input("Tên dự án", value=default_name_val, placeholder="Ví dụ: Brand Q3", key="proj_name_edit_input")
             
             b_col1, b_col2 = st.columns(2)
             with b_col1:
-                btn_save_new = st.button("💾 Lưu mới", type="primary", use_container_width=True)
+                btn_save_new = st.button(":material/save: Lưu", type="primary", width="stretch")
             with b_col2:
-                btn_rename = st.button("✏️ Đổi tên", use_container_width=True, disabled=sel_project.startswith("🌐"))
+                btn_rename = st.button(":material/edit: Đổi tên", width="stretch", disabled=sel_project == ALL_PROJECTS_LABEL)
             
-            if not sel_project.startswith("🌐"):
+            if sel_project != ALL_PROJECTS_LABEL:
                 st.markdown("---")
-                btn_del_proj = st.button("🗑️ Xóa dự án này", type="secondary", use_container_width=True)
+                btn_del_proj = st.button(":material/delete: Xóa dự án", type="tertiary", width="stretch")
                 if btn_del_proj:
                     c_m = Cache()
                     c_m.delete_project(sel_project)
                     c_m.close()
                     st.toast(f"Đã xóa dự án '{sel_project}'!", icon="🗑️")
-                    st.session_state["last_sel_project"] = "🌐 Tất cả web đã check"
+                    st.session_state["last_sel_project"] = ALL_PROJECTS_LABEL
                     st.rerun()
 
             if btn_save_new and save_name_input.strip():
@@ -759,7 +1207,7 @@ if st.session_state.get("results"):
                     st.toast(f"Đã lưu dự án '{save_name_input.strip()}'!", icon="💾")
                     st.session_state["last_sel_project"] = save_name_input.strip()
                     st.rerun()
-            elif btn_rename and save_name_input.strip() and not sel_project.startswith("🌐"):
+            elif btn_rename and save_name_input.strip() and sel_project != ALL_PROJECTS_LABEL:
                 c_m = Cache()
                 c_m.rename_project(sel_project, save_name_input.strip())
                 c_m.close()
@@ -768,8 +1216,8 @@ if st.session_state.get("results"):
                 st.rerun()
 
     with ch4:
-        with st.popover("🎛️", use_container_width=True, help="Bộ lọc Traffic nâng cao"):
-            st.markdown("##### 🎛️ Bộ lọc Traffic dự án")
+        with st.popover(":material/filter_alt:", width="stretch", help="Lọc kết quả"):
+            st.markdown("##### Lọc kết quả")
             flt_on = st.toggle("Bật bộ lọc traffic", value=st.session_state.get("row_flt_on", False), key="row_flt_toggle")
             st.session_state["row_flt_on"] = flt_on
             flt_min = st.text_input("Traffic tối thiểu", value=st.session_state.get("row_flt_min", "5k"), disabled=not flt_on, key="row_flt_min_input")
@@ -782,17 +1230,17 @@ if st.session_state.get("results"):
             st.session_state["row_flt_drop"] = flt_drop_no_site
             
             st.markdown("---")
-            btn_del_flt_pop = st.button("🗑️ Xóa các web đang lọc khỏi Supabase", type="secondary", use_container_width=True, help="Xóa vĩnh viễn toàn bộ website đang khớp với bộ lọc khỏi Supabase")
+            btn_del_flt_pop = st.button(":material/delete: Xóa kết quả đang lọc", type="tertiary", width="stretch", help="Xóa vĩnh viễn các website đang khớp bộ lọc")
             if btn_del_flt_pop:
                 st.session_state["do_delete_filtered"] = True
 
     with ch5:
-        search_kw = st.text_input("Tìm kiếm", placeholder="🔍 Gõ tên website hoặc brand để tìm nhanh...", key="table_search_input", label_visibility="collapsed")
+        search_kw = st.text_input("Tìm kiếm", placeholder="Tìm website hoặc brand", key="table_search_input", label_visibility="collapsed")
 
     # Handle project selection or refresh click
     if btn_refresh_project:
         c_m = Cache()
-        if sel_project.startswith("🌐"):
+        if sel_project == ALL_PROJECTS_LABEL:
             target_domains = c_m.get_all_saved_domains()
         else:
             target_domains = c_m.get_project_domains(sel_project)
@@ -800,17 +1248,32 @@ if st.session_state.get("results"):
         if target_domains:
             settings = RunSettings(min_delay=min_delay, max_delay=max_delay, use_cache=False, headless=True, proxies=proxies_list if use_proxy else None, concurrency=concurrency)
             st.toast(f"Đang quét lại {len(target_domains)} website...", icon="🔄")
-            outcome = _run_and_stream(target_domains, settings, serper_keys=serper_keys)
-            st.session_state["results"] = outcome.results
+            refresh_stop_event = threading.Event()
+            st.session_state["scan_stop_event"] = refresh_stop_event
+            st.session_state["scan_running"] = True
+            st.session_state["scan_stopping"] = False
+            try:
+                outcome = _run_and_stream(
+                    target_domains,
+                    settings,
+                    refresh_stop_event,
+                    serper_keys=serper_keys,
+                )
+                st.session_state["results"] = outcome.results
+            finally:
+                st.session_state["scan_running"] = False
+                st.session_state["scan_stopping"] = False
+                st.session_state["scan_worker_thread"] = None
+                st.session_state["scan_stop_event"] = None
             c_m = Cache()
-            if not sel_project.startswith("🌐"):
+            if sel_project != ALL_PROJECTS_LABEL:
                 c_m.save_project(sel_project, target_domains)
             c_m.close()
             st.rerun()
     elif sel_project != st.session_state.get("last_sel_project"):
         st.session_state["last_sel_project"] = sel_project
         c_m = Cache()
-        if sel_project.startswith("🌐"):
+        if sel_project == ALL_PROJECTS_LABEL:
             target_domains = c_m.get_all_saved_domains()
         else:
             target_domains = c_m.get_project_domains(sel_project)
@@ -837,24 +1300,18 @@ if st.session_state.get("results"):
         filtered_results = [
             r for r in filtered_results
             if q in (r.domain or "").lower()
-            or q in (r.brand_name or "").lower()
+            or q in (r.brand or "").lower()
             or q in (r.monthly_visits_raw or "").lower()
             or q in (r.status or "").lower()
         ]
 
-    with ch6:
-        st.download_button("📊 Excel", data=results_to_xlsx_bytes(filtered_results), file_name="traffic_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-    
-    with ch7:
-        st.download_button("📄 CSV", data=results_to_csv_bytes(filtered_results), file_name="traffic_results.csv", mime="text/csv", use_container_width=True)
-        
     is_filtered = len(filtered_results) < len(results) or search_kw.strip() or st.session_state.get("row_flt_on")
     if is_filtered:
         cap_col1, cap_col2 = st.columns([3.5, 1.2], vertical_alignment="center")
         with cap_col1:
             st.caption(f"🔍 Đang lọc hiển thị **{len(filtered_results)}** / {len(results)} website.")
         with cap_col2:
-            if st.button(f"🗑️ Xóa {len(filtered_results)} web khỏi Supabase", key="btn_del_filtered_cap", use_container_width=True):
+            if st.button(f":material/delete: Xóa {len(filtered_results)} website", key="btn_del_filtered_cap", type="tertiary", width="stretch"):
                 st.session_state["do_delete_filtered"] = True
 
     if st.session_state.get("do_delete_filtered"):
@@ -875,26 +1332,82 @@ if st.session_state.get("results"):
             st.toast(f"Đã xóa vĩnh viễn {n_del} website khỏi Supabase!", icon="🗑️")
             st.rerun()
 
-    _render_grid(results_to_dataframe(filtered_results).head(MAX_TABLE_ROWS), key=f"grid_{theme_name}")
+    # Render tối đa 1.000 dòng trước. Việc tạo Excel cho hơn 100k kết quả khá
+    # nặng và không được phép chặn bảng dữ liệu xuất hiện.
+    visible_results = filtered_results[:MAX_TABLE_ROWS]
+    _render_grid(results_to_dataframe(visible_results), key=f"grid_{theme_name}")
     if len(filtered_results) > MAX_TABLE_ROWS:
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(filtered_results)} dòng — tải file để xem đầy đủ.")
+
+    # Không tạo sẵn file cho hơn 100k dòng ở mọi lần rerun. Chuẩn bị theo yêu
+    # cầu rồi giữ bytes trong session; nhờ vậy bảng luôn hiện ngay.
+    export_signature = (
+        id(all_results),
+        len(filtered_results),
+        sel_project,
+        search_kw.strip(),
+        bool(filter_on), min_txt, max_txt, bool(keep_unknown), bool(drop_no_site),
+        bool(st.session_state.get("row_flt_on")),
+        st.session_state.get("row_flt_min", ""),
+        st.session_state.get("row_flt_max", ""),
+        bool(st.session_state.get("row_flt_keep")),
+        bool(st.session_state.get("row_flt_drop")),
+    )
+
+    with ch6:
+        xlsx_export = st.session_state.get("xlsx_export")
+        if xlsx_export and xlsx_export.get("signature") == export_signature:
+            st.download_button(
+                ":material/download: Tải Excel",
+                data=xlsx_export["data"],
+                file_name="traffic_results.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                width="stretch",
+            )
+        elif st.button(
+            ":material/download: Excel",
+            key="prepare_xlsx_export",
+            width="stretch",
+            help="Chuẩn bị file Excel đầy đủ",
+        ):
+            with st.spinner("Đang tạo Excel…"):
+                st.session_state["xlsx_export"] = {
+                    "signature": export_signature,
+                    "data": results_to_xlsx_bytes(filtered_results),
+                }
+            st.rerun()
+
+    with ch7:
+        csv_export = st.session_state.get("csv_export")
+        if csv_export and csv_export.get("signature") == export_signature:
+            st.download_button(
+                ":material/download: Tải CSV",
+                data=csv_export["data"],
+                file_name="traffic_results.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+        elif st.button(
+            ":material/download: CSV",
+            key="prepare_csv_export",
+            width="stretch",
+            help="Chuẩn bị file CSV đầy đủ",
+        ):
+            with st.spinner("Đang tạo CSV…"):
+                st.session_state["csv_export"] = {
+                    "signature": export_signature,
+                    "data": results_to_csv_bytes(filtered_results),
+                }
+            st.rerun()
 
 
 # ============================ Footer ============================
 st.markdown(
     f"""
-    <div style="margin-top: 60px; padding: 24px 0 12px; border-top: 1px solid {T['border']}; font-size: 12.5px; color: {T['muted']}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-weight: 700; color: {T['text']};">CheckTraffic Pro</span> © 2026 Vibevic Technology Inc. All rights reserved.
-        </div>
-        <div style="display: flex; gap: 14px; font-weight: 500;">
-            <a href="/api/docs" target="_blank" style="color: {PRIMARY}; text-decoration: none; font-weight: 600;">Swagger API Docs</a>
-            <span>·</span>
-            <span>Version 1.2.0 Pro</span>
-        </div>
-        <div>
-            Powered by <b style="color: {T['text']};">Playwright</b> & <b style="color: {PRIMARY};">Supabase Hybrid Cloud</b>
-        </div>
+    <div class="app-footer">
+        <b>CheckTraffic Pro</b><span>·</span>
+        <a href="/api/docs" target="_blank">API Docs</a><span>·</span>
+        <span>v1.2.0</span>
     </div>
     """,
     unsafe_allow_html=True,
