@@ -878,6 +878,16 @@ def _table_html(df: pd.DataFrame) -> str:
     """
 
 
+@st.cache_data(show_spinner=False)
+def _generate_xlsx_cached(domains_key: tuple[str, ...], _filtered_results: list[TrafficResult]) -> bytes:
+    return results_to_xlsx_bytes(_filtered_results)
+
+
+@st.cache_data(show_spinner=False)
+def _generate_csv_cached(domains_key: tuple[str, ...], _filtered_results: list[TrafficResult]) -> bytes:
+    return results_to_csv_bytes(_filtered_results)
+
+
 def _render_grid(df: pd.DataFrame, key: str = "grid"):
     df_clean = df.fillna("")
     st.dataframe(
@@ -1339,66 +1349,31 @@ if st.session_state.get("results"):
     if len(filtered_results) > MAX_TABLE_ROWS:
         st.caption(f"Hiển thị {MAX_TABLE_ROWS}/{len(filtered_results)} dòng — tải file để xem đầy đủ.")
 
-    # Không tạo sẵn file cho hơn 100k dòng ở mọi lần rerun. Chuẩn bị theo yêu
-    # cầu rồi giữ bytes trong session; nhờ vậy bảng luôn hiện ngay.
-    export_signature = (
-        id(all_results),
-        len(filtered_results),
-        sel_project,
-        search_kw.strip(),
-        bool(filter_on), min_txt, max_txt, bool(keep_unknown), bool(drop_no_site),
-        bool(st.session_state.get("row_flt_on")),
-        st.session_state.get("row_flt_min", ""),
-        st.session_state.get("row_flt_max", ""),
-        bool(st.session_state.get("row_flt_keep")),
-        bool(st.session_state.get("row_flt_drop")),
-    )
+    domains_key = tuple(r.domain for r in filtered_results)
+    xlsx_data = _generate_xlsx_cached(domains_key, filtered_results) if filtered_results else b""
+    csv_data = _generate_csv_cached(domains_key, filtered_results) if filtered_results else b""
 
     with ch6:
-        xlsx_export = st.session_state.get("xlsx_export")
-        if xlsx_export and xlsx_export.get("signature") == export_signature:
-            st.download_button(
-                ":material/download: Tải Excel",
-                data=xlsx_export["data"],
-                file_name="traffic_results.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width="stretch",
-            )
-        elif st.button(
-            ":material/download: Excel",
-            key="prepare_xlsx_export",
+        st.download_button(
+            ":material/download: Tải Excel",
+            data=xlsx_data,
+            file_name="traffic_results.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             width="stretch",
-            help="Chuẩn bị file Excel đầy đủ",
-        ):
-            with st.spinner("Đang tạo Excel…"):
-                st.session_state["xlsx_export"] = {
-                    "signature": export_signature,
-                    "data": results_to_xlsx_bytes(filtered_results),
-                }
-            st.rerun()
+            key="dl_xlsx_btn",
+            disabled=not filtered_results,
+        )
 
     with ch7:
-        csv_export = st.session_state.get("csv_export")
-        if csv_export and csv_export.get("signature") == export_signature:
-            st.download_button(
-                ":material/download: Tải CSV",
-                data=csv_export["data"],
-                file_name="traffic_results.csv",
-                mime="text/csv",
-                width="stretch",
-            )
-        elif st.button(
-            ":material/download: CSV",
-            key="prepare_csv_export",
+        st.download_button(
+            ":material/download: Tải CSV",
+            data=csv_data,
+            file_name="traffic_results.csv",
+            mime="text/csv",
             width="stretch",
-            help="Chuẩn bị file CSV đầy đủ",
-        ):
-            with st.spinner("Đang tạo CSV…"):
-                st.session_state["csv_export"] = {
-                    "signature": export_signature,
-                    "data": results_to_csv_bytes(filtered_results),
-                }
-            st.rerun()
+            key="dl_csv_btn",
+            disabled=not filtered_results,
+        )
 
 
 # ============================ Footer ============================
